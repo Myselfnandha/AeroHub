@@ -1,0 +1,5 @@
+{
+    "max_entries": 1000,
+    "export_batch": 500,
+    "auto_export": true
+}
