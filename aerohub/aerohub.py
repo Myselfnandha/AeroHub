@@ -660,6 +660,165 @@ class AeroHubCore:
             self._update_tray_icon()
             time.sleep(3)
 
+    def _is_system_in_game_mode(self) -> bool:
+        """Checks if the system is running a fullscreen DirectX/OpenGL game or fullscreen app."""
+        import ctypes.wintypes
+        try:
+            # 1. SHQueryUserNotificationState check
+            state = ctypes.c_int()
+            res = ctypes.windll.shell32.SHQueryUserNotificationState(ctypes.byref(state))
+            if res == 0:
+                # 1: QUNS_BUSY (covers fullscreen/presenting), 2: QUNS_RUNNING_D3D_FULL_SCREEN (exclusive fullscreen games)
+                if state.value in (1, 2):
+                    return True
+        except Exception:
+            pass
+
+        # 2. Fallback to Active Bounding Window Check
+        try:
+            user32 = ctypes.windll.user32
+            hwnd = user32.GetForegroundWindow()
+            if not hwnd:
+                return False
+
+            # Ignore common desktop and shell windows
+            class_name = ctypes.create_unicode_buffer(256)
+            user32.GetClassNameW(hwnd, class_name, 256)
+            cname = class_name.value
+            if cname in ("Progman", "WorkerW", "Shell_TrayWnd", "Button"):
+                return False
+
+            # Get window rect
+            rect = ctypes.wintypes.RECT()
+            user32.GetWindowRect(hwnd, ctypes.byref(rect))
+            width = rect.right - rect.left
+            height = rect.bottom - rect.top
+
+            # Get active monitor info
+            monitor = ctypes.windll.user32.MonitorFromWindow(hwnd, 1) # MONITOR_DEFAULTTOPRIMARY = 1
+            
+            # MONITORINFO structure size is 40 bytes
+            class MONITORINFO(ctypes.Structure):
+                _fields_ = [
+                    ("cbSize", ctypes.c_ulong),
+                    ("rcMonitor", ctypes.wintypes.RECT),
+                    ("rcWork", ctypes.wintypes.RECT),
+                    ("dwFlags", ctypes.c_ulong)
+                ]
+            info = MONITORINFO()
+            info.cbSize = ctypes.sizeof(MONITORINFO)
+            if ctypes.windll.user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+                m_width = info.rcMonitor.right - info.rcMonitor.left
+                m_height = info.rcMonitor.bottom - info.rcMonitor.top
+                # Check if dimensions match active monitor dimensions
+                if width >= m_width and height >= m_height:
+                    # Check window styles: WS_POPUP (0x80000000) or lack of WS_CAPTION (0x00C00000)
+                    style = user32.GetWindowLongW(hwnd, -16)  # GWL_STYLE
+                    if (style & 0x80000000) or not (style & 0x00C00000):
+                        return True
+        except Exception:
+            pass
+        return False
+
+    def _set_service_priority(self, service_id: str, priority_class: int):
+        """Set process priority of a managed service."""
+        for proc in self.processes:
+            if proc.id == service_id:
+                if proc.status == "running" and proc.pid:
+                    try:
+                        p = psutil.Process(proc.pid)
+                        p.nice(priority_class)
+                    except Exception as e:
+                        logger.warning(f"[GAME MODE] Failed to set priority of {service_id}: {e}")
+
+    def _send_udp_ipc_message(self, port: int, message: str):
+        """Send a UDP packet to local port."""
+        import socket
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.sendto(message.encode("utf-8"), ("127.0.0.1", port))
+            sock.close()
+            logger.info(f"[GAME MODE] Sent IPC '{message}' to port {port}")
+        except Exception as e:
+            logger.error(f"[GAME MODE] IPC send failed: {e}")
+
+    def _control_service(self, service_id: str, action: str):
+        """Start or stop a service by its ID."""
+        for proc in self.processes:
+            if proc.id == service_id:
+                if action == "stop":
+                    if proc.status == "running":
+                        logger.info(f"[GAME MODE] Stopping service: {service_id}")
+                        proc.stop()
+                elif action == "start":
+                    if proc.enabled and proc.status != "running":
+                        logger.info(f"[GAME MODE] Starting service: {service_id}")
+                        proc.start()
+
+    def _game_mode_monitor(self):
+        """Periodically polls to check if game/fullscreen mode is active and manages utilities."""
+        game_mode_active = False
+        cooldown_end_time = 0
+        temp_monitor_paused = False
+
+        while self._running:
+            try:
+                is_gaming = self._is_system_in_game_mode()
+            except Exception as e:
+                logger.error(f"Error checking game mode: {e}")
+                is_gaming = False
+
+            if is_gaming:
+                # --- ENTERING / SUSTAINING GAME MODE ---
+                cooldown_end_time = 0  # reset cooldown
+                
+                # Force IDLE priority in case of service restart
+                self._set_service_priority("health_app", psutil.IDLE_PRIORITY_CLASS)
+                
+                if not game_mode_active:
+                    logger.info("[GAME MODE] Fullscreen/Game detected. Activating AeroEco...")
+                    game_mode_active = True
+                    
+                    # Send UDP IPC packet game_mode:on to health_app
+                    self._send_udp_ipc_message(5098, "game_mode:on")
+                    
+                    # Stop temp_monitor service if it is running
+                    temp_monitor_running = False
+                    for proc in self.processes:
+                        if proc.id == "temp_monitor" and proc.status == "running":
+                            temp_monitor_running = True
+                            
+                    if temp_monitor_running:
+                        self._control_service("temp_monitor", "stop")
+                        temp_monitor_paused = True
+            else:
+                # --- OUT OF GAME MODE ---
+                if game_mode_active:
+                    logger.info("[GAME MODE] Fullscreen/Game exited. Entering resume cooldown...")
+                    game_mode_active = False
+                    
+                    # Restore health_app priority to NORMAL immediately
+                    self._set_service_priority("health_app", psutil.NORMAL_PRIORITY_CLASS)
+                    
+                    # Send UDP IPC packet game_mode:off to health_app immediately
+                    self._send_udp_ipc_message(5098, "game_mode:off")
+                    
+                    # Initialize cooldown period for temp_monitor
+                    cooldown_end_time = time.time() + 30.0
+
+                # Check if cooldown has expired
+                if cooldown_end_time > 0:
+                    remaining = cooldown_end_time - time.time()
+                    if remaining <= 0:
+                        logger.info("[GAME MODE] Cooldown expired. Resuming temp_monitor.")
+                        cooldown_end_time = 0
+                        
+                        if temp_monitor_paused:
+                            self._control_service("temp_monitor", "start")
+                            temp_monitor_paused = False
+
+            time.sleep(3.0)
+
     def _update_tray_icon(self):
         """Update tray icon based on running process count."""
         running = sum(1 for p in self.processes if p.status == "running")
@@ -822,6 +981,10 @@ class AeroHubCore:
         # Start health monitor
         health_thread = threading.Thread(target=self._health_monitor, daemon=True)
         health_thread.start()
+
+        # Start Game Mode monitor
+        game_mode_thread = threading.Thread(target=self._game_mode_monitor, daemon=True)
+        game_mode_thread.start()
 
         # Create and run floating dashboard widget (tkinter main loop on main thread)
         self.widget = DashboardWidget(self.processes, self._on_toggle, self._on_restart)

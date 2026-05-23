@@ -10,7 +10,6 @@ import subprocess
 import threading
 import logging
 import logging.handlers
-import time
 
 try:
     import pystray
@@ -116,12 +115,12 @@ class SHELLEXECUTEINFO(ctypes.Structure):
         ("dwHotKey", ctypes.c_ulong),
     ]
 
-def show_tooltip(text):
+def show_tooltip(text, state):
     """Show a custom floating tooltip notification above the taskbar using a separate process."""
     try:
         notifier_script = os.path.join(SCRIPT_DIR, "tooltip_notifier.py")
         subprocess.Popen(
-            ["pythonw", notifier_script, text],
+            ["pythonw", notifier_script, text, state],
             creationflags=subprocess.CREATE_NO_WINDOW
         )
     except Exception as e:
@@ -132,13 +131,7 @@ def toggle_touch():
     global touch_enabled, tray_icon
     logger.info("Toggling touch screen...")
 
-    import ctypes
-    
-    # Define shell execute constants
-    SEE_MASK_NOCLOSEPROCESS = 0x00000040
-    SW_HIDE = 0
-    WAIT_OBJECT_0 = 0x00000000
-    WAIT_TIMEOUT = 0x00000102
+
     
     # Path to the log file written by PS1
     ps1_log_path = os.path.join(UTILS_DIR, "touch_toggle_run.log")
@@ -199,7 +192,7 @@ def toggle_touch():
             tray_icon.menu = create_menu()
             
             # Show tooltip notification
-            show_tooltip(f"Touch Screen is now {state_str}")
+            show_tooltip(f"Touch Screen is now {state_str}", "on" if touch_enabled else "off")
 
     except Exception as e:
         logger.error(f"Toggle failed: {e}")

@@ -782,6 +782,7 @@ class HealthApp:
         self._skip_next = False
         self._last_short_break = time.time()
         self._last_long_break = time.time()
+        self._game_mode = False
 
     def _take_break(self, break_type: str = "short"):
         """Execute a break."""
@@ -825,12 +826,29 @@ class HealthApp:
             try:
                 now = time.time()
 
-                # Weather check every 30 minutes
-                if self.settings.get("enable_weather_warmth") and now - last_weather_check > 1800:
+                # Weather check every 30 minutes (only if not in game mode)
+                if not self._game_mode and self.settings.get("enable_weather_warmth") and now - last_weather_check > 1800:
                     last_weather_check = now
                     threading.Thread(target=self._update_color_temp, daemon=True).start()
 
                 if self._paused:
+                    time.sleep(5)
+                    continue
+
+                if self._game_mode:
+                    # Low-resource behavior: keep timers running but postpone breaks so they don't block the screen during games
+                    short_interval = self.settings["short_break_interval_min"] * 60
+                    long_interval = self.settings["long_break_interval_min"] * 60
+                    elapsed_short = now - self._last_short_break
+                    elapsed_long = now - self._last_long_break
+
+                    if elapsed_long >= long_interval:
+                        self._last_long_break = now - long_interval + 120  # Postpone by 2 mins
+                        logger.info("[GAME MODE] Auto-postponing long break by 2 minutes (AeroEco).")
+                    elif elapsed_short >= short_interval:
+                        self._last_short_break = now - short_interval + 120  # Postpone by 2 mins
+                        logger.info("[GAME MODE] Auto-postponing short break by 2 minutes (AeroEco).")
+
                     time.sleep(5)
                     continue
 
@@ -959,9 +977,45 @@ class HealthApp:
         icon.stop()
         os._exit(0)
 
+    def _start_udp_listener(self):
+        """Starts a background UDP socket listener for Game Mode notifications."""
+        import socket
+        def _listen():
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.bind(("127.0.0.1", 5098))
+            except Exception as e:
+                logger.error(f"Failed to bind HealthApp UDP socket: {e}")
+                return
+            
+            logger.info("HealthApp UDP Listener bound to 127.0.0.1:5098")
+            while self._running:
+                try:
+                    data, addr = sock.recvfrom(1024)
+                    msg = data.decode("utf-8").strip()
+                    if msg == "game_mode:on":
+                        if not self._game_mode:
+                            logger.info("[UDP] Game Mode activated. Shifting to low-resource mode...")
+                            self._game_mode = True
+                    elif msg == "game_mode:off":
+                        if self._game_mode:
+                            logger.info("[UDP] Game Mode deactivated. Restoring normal mode...")
+                            self._game_mode = False
+                except Exception as e:
+                    logger.error(f"Error in UDP listener: {e}")
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_listen, daemon=True)
+        t.start()
+
     def run(self):
         logger.info("=" * 50)
         logger.info("Health App starting...")
+        self._start_udp_listener()
         logger.info(f"Settings: {json.dumps(self.settings, indent=2)}")
 
         # Generate breathing sound
