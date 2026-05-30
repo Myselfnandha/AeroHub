@@ -609,13 +609,18 @@ class TempMonitorApp:
     def _shorten_name(self, name: str) -> str:
         """Shorten verbose hardware sensor names to compact labels."""
         name_upper = name.upper()
-        if "BATZ" in name_upper: return "Battery Temp"
-        if "CHGZ" in name_upper: return "Charger Temp"
-        if "CPUZ" in name_upper: return "CPU Temp"
-        if "EXTZ" in name_upper: return "External Temp"
-        if "GFXZ" in name_upper: return "Graphics Zone"
-        if "LOCZ" in name_upper: return "Local Temp"
-        if "PCHZ" in name_upper: return "PCH Zone"
+        mappings = {
+            "BATZ": "Battery Temp",
+            "CHGZ": "Charger Temp",
+            "CPUZ": "CPU Temp",
+            "EXTZ": "External Temp",
+            "GFXZ": "Graphics Zone",
+            "LOCZ": "Local Temp",
+            "PCHZ": "PCH Zone",
+        }
+        for key, value in mappings.items():
+            if key in name_upper:
+                return value
         if "THERMAL ZONE" in name_upper or "THERMALZONE" in name_upper:
             parts = name.split("\\")
             if parts:
@@ -746,8 +751,10 @@ class TempMonitorApp:
                         
                         self.tray_icon.title = tooltip_str
                         
-                        # Update dynamic right-click menu
-                        self.tray_icon.menu = self._build_sensor_menu()
+                        # Dynamically rebuild the static menu with latest temperatures
+                        if hasattr(self, 'tray_icon') and self.tray_icon:
+                            self.tray_icon.menu = self._build_sensor_menu()
+                            self.tray_icon.update_menu()
                     except Exception as e:
                         logger.error(f"Tray update error: {e}")
 
@@ -798,8 +805,20 @@ class TempMonitorApp:
         self._force_refresh()
 
     def _build_sensor_menu(self):
-        """Build dynamic menu items showing all sensors with short names."""
+        """Build menu items with live temperatures."""
         items = []
+        
+        # Show all temps at the top
+        if self.all_temps:
+            for name, val in sorted(self.all_temps.items()):
+                short = self._shorten_name(name)
+                items.append(pystray.MenuItem(f"{short}: {val:.0f}°C", None, enabled=False))
+        else:
+            items.append(pystray.MenuItem("No sensors detected", None, enabled=False))
+            
+        items.append(pystray.Menu.SEPARATOR)
+        
+        # Controls
         items.append(pystray.MenuItem("Refresh Now", self._force_refresh, default=True))
         items.append(pystray.Menu.SEPARATOR)
 
@@ -811,10 +830,8 @@ class TempMonitorApp:
         display_items.append(pystray.Menu.SEPARATOR)
 
         if self.all_temps:
-            for name, val in sorted(self.all_temps.items()):
+            for name in sorted(self.all_temps.keys()):
                 short = self._shorten_name(name)
-                label = f"{short}: {val:.0f}°C"
-                items.append(pystray.MenuItem(label, None, enabled=False))
                 
                 def make_callback(s_name):
                     return lambda icon, item: self._set_display_sensor(s_name)
@@ -825,19 +842,17 @@ class TempMonitorApp:
                     make_callback(name),
                     checked=make_checked(name),
                     radio=True))
-        else:
-            items.append(pystray.MenuItem("No sensors detected", None, enabled=False))
 
-        warning_temp = self.settings.get("warning_temp", 75)
-        critical_temp = self.settings.get("critical_temp", 85)
-        
-        items.append(pystray.Menu.SEPARATOR)
         items.append(pystray.MenuItem("Set Default Display", pystray.Menu(*display_items)))
         items.append(pystray.Menu.SEPARATOR)
-        items.append(pystray.MenuItem(f"⚠ Warn: {warning_temp}°C", None, enabled=False))
-        items.append(pystray.MenuItem(f"🔥 Crit: {critical_temp}°C", None, enabled=False))
+        
+        warn_t = self.settings.get('warning_temp', 75)
+        crit_t = self.settings.get('critical_temp', 85)
+        items.append(pystray.MenuItem(f"⚠ Warn: {warn_t}°C", None, enabled=False))
+        items.append(pystray.MenuItem(f"🔥 Crit: {crit_t}°C", None, enabled=False))
+        
         items.append(pystray.Menu.SEPARATOR)
-        items.append(pystray.MenuItem("Settings", self._open_settings, default=True))
+        items.append(pystray.MenuItem("Settings", self._open_settings))
         items.append(pystray.MenuItem("Quit", self._on_quit))
         return pystray.Menu(*items)
 
@@ -873,18 +888,7 @@ class TempMonitorApp:
             name="TempMonitor",
             icon=icon_image,
             title=f"CPU: {self.cpu_temp:.0f}°C | GPU: {gpu_str}",
-            menu=pystray.Menu(
-                pystray.MenuItem("Refresh", self._force_refresh),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem(f"CPU: {self.cpu_temp:.0f}°C", None, enabled=False),
-                pystray.MenuItem(f"GPU: {gpu_str}", None, enabled=False),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem(f"⚠ Warn: {warning_temp}°C", None, enabled=False),
-                pystray.MenuItem(f"🔥 Crit: {critical_temp}°C", None, enabled=False),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Settings", self._open_settings, default=True),
-                pystray.MenuItem("Quit", self._on_quit),
-            ),
+            menu=self._build_sensor_menu()
         )
 
         # Start monitor thread

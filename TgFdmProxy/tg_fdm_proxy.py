@@ -2040,7 +2040,7 @@ def _start_tray_icon():
         os._exit(0)
 
     def _on_show_dashboard(icon, item):
-        logger.info("[TRAY] Show Log Dashboard menu item selected")
+        logger.info("[TRAY] Dashboard menu item selected")
         LogDashboard.show_dashboard()
 
     _tray_icon = pystray.Icon(
@@ -2048,7 +2048,7 @@ def _start_tray_icon():
         icon=_create_telegram_icon(64, True),
         title="Telegram FDM Proxy — Running",
         menu=pystray.Menu(
-            pystray.MenuItem("Show Log Dashboard", _on_show_dashboard, default=True),
+            pystray.MenuItem("Dashboard", _on_show_dashboard, default=True),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Exit", _on_quit),
         ),

@@ -4,12 +4,17 @@ Provides a tray icon that shows touchscreen ON/OFF state.
 Left-click toggles the touchscreen by running TouchToggle.ps1 elevated.
 """
 
+
 import os
 import sys
 import subprocess
 import threading
 import logging
 import logging.handlers
+import json
+import tkinter as tk
+from tkinter import colorchooser
+from tkinter import ttk
 
 try:
     import pystray
@@ -22,7 +27,7 @@ except ImportError:
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TOGGLES_DIR = os.path.dirname(SCRIPT_DIR)
 PROJECT_DIR = os.path.dirname(TOGGLES_DIR)
-PS1_PATH = os.path.join(PROJECT_DIR, "tools", "TouchToggle.ps1")
+PS1_PATH = os.path.join(SCRIPT_DIR, "TouchToggle.ps1")
 LOGS_DIR = r"c:\Users\NANDHA A\Desktop\UTILITIES\Logs"
 LOG_PATH = os.path.join(LOGS_DIR, "touch_toggle.log")
 
@@ -48,6 +53,210 @@ logger = logging.getLogger("TouchToggle")
 # ── State ──
 touch_enabled = True
 tray_icon = None
+
+
+
+# ── Settings ──
+SETTINGS_FILE = os.path.join(SCRIPT_DIR, "touch_settings.json")
+DEFAULT_SETTINGS = {
+    "toast_pos": "Center",
+    "toast_anim_style": "Slide",
+    "toast_width": 260,
+    "toast_height": 60,
+    "toast_bg_color": "#18181B",
+    "toast_fg_color": "#FFFFFF",
+    "toast_font_size": 11,
+    "toast_font_weight": "bold",
+    "toast_emoji": "🖐️",
+    "toast_radius": 15,
+    "toast_padding_x": 12,
+    "toast_padding_y": 10,
+    "toast_opacity": 0.95,
+    "toast_border_width": 1,
+    "toast_border_color": "#27272A",
+    "toast_enable_sound": False
+}
+
+def load_settings():
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, "r") as f:
+                saved = json.load(f)
+                return {**DEFAULT_SETTINGS, **saved}
+        except Exception as e:
+            logger.error(f"Error loading settings: {e}")
+    return dict(DEFAULT_SETTINGS)
+
+def save_settings(settings):
+    try:
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(settings, f, indent=4)
+        logger.info("Settings saved.")
+    except Exception as e:
+        logger.error(f"Error saving settings: {e}")
+
+global_settings = load_settings()
+
+TH = {
+    "bg": "#0a0a0a",
+    "bg2": "#171717",
+    "bg3": "#262626",
+    "fg": "#e5e5e5",
+    "fg_dim": "#a3a3a3",
+    "accent": "#ff8800",
+    "border": "#333333"
+}
+
+def apply_dwm_rounding(window):
+    try:
+        import ctypes
+        DWMWA_WINDOW_CORNER_PREFERENCE = 33
+        hwnd = ctypes.windll.user32.GetParent(window.winfo_id())
+        value = ctypes.c_int(2)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ctypes.byref(value), ctypes.sizeof(value))
+    except Exception:
+        pass
+
+class SettingsWindow:
+    def __init__(self, parent, settings, on_save):
+        self.parent = parent
+        self.settings = settings
+        self.on_save = on_save
+        self.entries = {}
+
+    def show(self):
+        root = tk.Toplevel(self.parent)
+        root.title("Touch Toggle Config")
+        root.geometry("600x500")
+        root.configure(bg=TH["bg"])
+        root.resizable(False, False)
+        root.grab_set()
+
+        try: apply_dwm_rounding(root)
+        except Exception: pass
+
+        def on_closing():
+            if hasattr(self, 'preview_instance') and self.preview_instance and hasattr(self.preview_instance, 'force_close'):
+                self.preview_instance.force_close()
+            root.grab_release()
+            root.destroy()
+            
+        root.protocol("WM_DELETE_WINDOW", on_closing)
+
+        main_container = tk.Frame(root, bg=TH["bg"])
+        main_container.pack(fill=tk.BOTH, expand=True)
+
+        self.sidebar = tk.Frame(main_container, bg=TH["bg2"], width=180)
+        self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
+        self.sidebar.pack_propagate(False)
+
+        tk.Label(self.sidebar, text="TOUCH.SYS", font=("Consolas", 16, "bold"), bg=TH["bg2"], fg=TH["accent"]).pack(pady=(30, 40))
+
+        tk.Button(
+            self.sidebar, text="[ SAVE_CFG ]", font=("Consolas", 12, "bold"),
+            bg=TH["bg3"], fg=TH["accent"], activebackground=TH["bg"], activeforeground=TH["accent"],
+            relief=tk.FLAT, cursor="hand2", command=lambda: self._save_and_close(root)
+        ).pack(side=tk.BOTTOM, pady=20, padx=20, fill=tk.X)
+
+        self.content_area = tk.Frame(main_container, bg=TH["bg"])
+        self.content_area.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        tk.Label(self.content_area, text="UI / UX CONFIG", font=("Consolas", 14, "bold"), bg=TH["bg"], fg=TH["fg"]).pack(anchor=tk.W, pady=(0, 10))
+        
+        f2_left = tk.Frame(self.content_area, bg=TH["bg"])
+        f2_left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+        
+        f2_right = tk.Frame(self.content_area, bg=TH["bg"])
+        f2_right.pack(side=tk.LEFT, fill=tk.Y)
+
+        self._add_combo(f2_left, "Position:", "toast_pos", 0, ["Left", "Center", "Right"])
+        self._add_combo(f2_left, "Animation:", "toast_anim_style", 1, ["Slide", "Fade"])
+        self._add_field(f2_left, "Width (px):", "toast_width", 2)
+        self._add_field(f2_left, "Height (px):", "toast_height", 3)
+        self._add_color_field(f2_left, "Background:", "toast_bg_color", 4)
+        self._add_color_field(f2_left, "Text Color:", "toast_fg_color", 5)
+        self._add_field(f2_left, "Font Size:", "toast_font_size", 6)
+        self._add_combo(f2_left, "Font Weight:", "toast_font_weight", 7, ["normal", "bold"])
+        
+        self._add_field(f2_right, "Emoji Icon:", "toast_emoji", 0, is_str=True)
+        self._add_field(f2_right, "Radius (px):", "toast_radius", 1)
+        self._add_field(f2_right, "Padding X:", "toast_padding_x", 2)
+        self._add_field(f2_right, "Padding Y:", "toast_padding_y", 3)
+        self._add_field(f2_right, "Opacity:", "toast_opacity", 4)
+        self._add_field(f2_right, "Border Width:", "toast_border_width", 5)
+        self._add_color_field(f2_right, "Border Color:", "toast_border_color", 6)
+        
+        btn_frame = tk.Frame(self.content_area, bg=TH["bg"])
+        btn_frame.pack(fill=tk.X, pady=20, side=tk.BOTTOM)
+        
+        tk.Button(
+            btn_frame, text="[ PREVIEW_UI ]", font=("Consolas", 10, "bold"),
+            bg=TH["bg2"], fg=TH["accent"], activebackground=TH["bg3"], activeforeground=TH["accent"],
+            relief=tk.FLAT, cursor="hand2", command=self._preview_toast, padx=20, pady=8,
+        ).pack(side=tk.RIGHT)
+
+    def _add_field(self, parent_frame, label, key, row, is_str=False):
+        tk.Label(parent_frame, text=label, font=("Consolas", 9), bg=TH["bg"], fg=TH["fg_dim"]).grid(row=row, column=0, sticky=tk.W, pady=8)
+        var = tk.StringVar(value=str(self.settings.get(key, "")))
+        tk.Entry(parent_frame, textvariable=var, font=("Consolas", 10), bg=TH["bg"], fg=TH["fg"], insertbackground=TH["accent"], relief=tk.FLAT, highlightthickness=1, highlightcolor=TH["accent"], highlightbackground=TH["border"], width=10).grid(row=row, column=1, sticky=tk.E, pady=8, padx=(10, 0))
+        self.entries[key] = (var, is_str)
+        var.trace_add("write", lambda *args: self._schedule_preview())
+
+    def _add_combo(self, parent_frame, label, key, row, values):
+        tk.Label(parent_frame, text=label, font=("Consolas", 9), bg=TH["bg"], fg=TH["fg_dim"]).grid(row=row, column=0, sticky=tk.W, pady=8)
+        var = tk.StringVar(value=self.settings.get(key, values[0]))
+        ttk.Combobox(parent_frame, textvariable=var, values=values, font=("Consolas", 10), state="readonly", width=8).grid(row=row, column=1, sticky=tk.E, pady=8, padx=(10, 0))
+        self.entries[key] = (var, True)
+        var.trace_add("write", lambda *args: self._schedule_preview())
+
+    def _add_color_field(self, parent_frame, label, key, row):
+        tk.Label(parent_frame, text=label, font=("Consolas", 9), bg=TH["bg"], fg=TH["fg_dim"]).grid(row=row, column=0, sticky=tk.W, pady=8)
+        var = tk.StringVar(value=self.settings.get(key, "#ffffff"))
+        def choose_color(v=var):
+            color_code = colorchooser.askcolor(title="Choose color", initialcolor=v.get())[1]
+            if color_code:
+                v.set(color_code)
+                btn.config(bg=color_code)
+        btn = tk.Button(parent_frame, bg=var.get(), width=6, relief=tk.FLAT, cursor="hand2", command=choose_color)
+        btn.grid(row=row, column=1, sticky=tk.E, pady=8, padx=(10, 0))
+        self.entries[key] = (var, True)
+        var.trace_add("write", lambda *args: self._schedule_preview())
+
+    def _schedule_preview(self):
+        if hasattr(self, '_preview_timer') and self._preview_timer:
+            try: self.parent.after_cancel(self._preview_timer)
+            except Exception: pass
+        self._preview_timer = self.parent.after(400, self._preview_toast)
+
+    def _preview_toast(self):
+        temp_settings = dict(self.settings)
+        for key, (var, var_type) in self.entries.items():
+            val = var.get()
+            try:
+                if key in ("toast_opacity",): temp_settings[key] = float(val)
+                elif not var_type: temp_settings[key] = int(val)
+                else: temp_settings[key] = val
+            except ValueError: pass
+        
+        # Save temp settings, launch preview
+        with open(os.path.join(SCRIPT_DIR, "temp_preview.json"), "w") as f:
+            json.dump(temp_settings, f)
+            
+        notifier_script = os.path.join(SCRIPT_DIR, "tooltip_notifier.py")
+        subprocess.Popen(["pythonw", notifier_script, "Preview Toast", "on", "1"], creationflags=subprocess.CREATE_NO_WINDOW)
+
+    def _save_and_close(self, root):
+        for key, (var, var_type) in self.entries.items():
+            val = var.get()
+            try:
+                if key in ("toast_opacity",): self.settings[key] = float(val)
+                elif not var_type: self.settings[key] = int(val)
+                else: self.settings[key] = val
+            except ValueError: pass
+        save_settings(self.settings)
+        self.on_save(self.settings)
+        root.grab_release()
+        root.destroy()
 
 
 def create_icon_image(enabled: bool) -> Image.Image:
@@ -79,6 +288,28 @@ def create_icon_image(enabled: bool) -> Image.Image:
     draw.text((x, y), text, fill=(255, 255, 255, 255), font=font)
 
     return img
+
+
+
+import queue
+gui_queue = queue.Queue()
+tk_root = None
+
+def _process_gui_queue_loop():
+    while not gui_queue.empty():
+        try:
+            action = gui_queue.get_nowait()
+            if action == "settings":
+                def on_saved(new_settings):
+                    global global_settings
+                    global_settings = new_settings
+                SettingsWindow(tk_root, dict(global_settings), on_saved).show()
+        except Exception as e:
+            logger.error(f"Error processing GUI queue: {e}")
+    tk_root.after(100, _process_gui_queue_loop)
+
+def open_settings(icon, item):
+    gui_queue.put("settings")
 
 
 def check_touch_state() -> bool:
@@ -248,6 +479,7 @@ def on_quit(icon, item):
     """Quit the tray app."""
     logger.info("Quitting Touch Toggle tray app.")
     icon.stop()
+    if tk_root: tk_root.quit()
 
 
 def on_click(icon, item):
@@ -263,6 +495,7 @@ def create_menu():
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Toggle Touch Screen", on_toggle, default=True),
         pystray.Menu.SEPARATOR,
+        pystray.MenuItem("Settings", open_settings),
         pystray.MenuItem("Quit", on_quit),
     )
 
@@ -287,7 +520,16 @@ def main():
     )
 
     logger.info("Tray icon created. Running...")
-    tray_icon.run()
+    
+    global tk_root
+    tk_root = tk.Tk()
+    tk_root.withdraw()
+    
+    icon_thread = threading.Thread(target=tray_icon.run, daemon=True)
+    icon_thread.start()
+    
+    tk_root.after(100, _process_gui_queue_loop)
+    tk_root.mainloop()
 
 
 if __name__ == "__main__":

@@ -83,15 +83,18 @@ logger = logging.getLogger("HealthApp")
 
 # ── Theme ──
 TH = {
-    "bg": "#0a0a1a",
-    "bg2": "#121228",
-    "accent": "#7c3aed",
-    "accent_hover": "#9b59f5",
-    "fg": "#f0f0f0",
-    "fg_dim": "#8892b0",
-    "success": "#00ff88",
-    "warning": "#ffdd00",
-    "border": "#2d2d5e",
+    "bg": "#070b14",          # Deep space black
+    "bg2": "#101625",         # Slightly lighter for panels
+    "bg3": "#1a233a",         # Highlight panels
+    "accent": "#00f0ff",      # Cyberpunk Neon Cyan
+    "accent_hover": "#33f3ff",
+    "fg": "#e2e8f0",          # Bright tech gray
+    "fg_dim": "#64748b",      # Muted tech gray
+    "success": "#00ff41",     # Matrix green
+    "warning": "#ffb000",     # Warning orange
+    "danger": "#ff2a2a",      # Neon Red
+    "border": "#1e293b",      # Dark border
+    "border_glow": "#0088aa"  # Accent border
 }
 
 # ── Media Key Constants ──
@@ -599,7 +602,6 @@ class WarningToast:
         pos = self.settings.get("toast_pos", "Center").lower()
         bg_col = self.settings.get("toast_bg_color", "#252525")
         fg_col = self.settings.get("toast_fg_color", "#ffffff")
-        accent_col = self.settings.get("toast_accent_color", "#7c3aed")
         font_size = int(self.settings.get("toast_font_size", 11))
         font_weight = self.settings.get("toast_font_weight", "bold")
         emoji = self.settings.get("toast_emoji", "👁️")
@@ -993,7 +995,7 @@ class SettingsWindow:
 
     def _create(self):
         root = tk.Toplevel(self.parent)
-        root.title("Health App — Settings")
+        root.title("SYSTEM OVERRIDE // HEALTH CONFIG")
         root.configure(bg=TH["bg"])
         root.resizable(False, False)
         root.grab_set()
@@ -1011,60 +1013,86 @@ class SettingsWindow:
             
         root.protocol("WM_DELETE_WINDOW", on_closing)
 
-        tk.Label(
-            root, text="⚙️ Health App Settings",
-            font=("Segoe UI", 16, "bold"), bg=TH["bg"], fg=TH["accent"],
-        ).pack(pady=(20, 10))
+        # Main Layout: Sidebar (Left) and Content (Right)
+        main_container = tk.Frame(root, bg=TH["bg"])
+        main_container.pack(fill=tk.BOTH, expand=True)
 
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure("TNotebook", background=TH["bg"], borderwidth=0)
-        style.configure(
-            "TNotebook.Tab",
-            background=TH["bg2"], foreground=TH["fg"],
-            font=("Segoe UI", 10), padding=[10, 5],
-        )
-        style.map(
-            "TNotebook.Tab",
-            background=[("selected", TH["accent"])],
-            foreground=[("selected", "white")],
-        )
+        # Sidebar
+        self.sidebar = tk.Frame(main_container, bg=TH["bg2"], width=200)
+        self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
+        self.sidebar.pack_propagate(False)
 
-        notebook = ttk.Notebook(root)
-        notebook.pack(fill=tk.BOTH, expand=True, padx=20, pady=5)
+        # Title in Sidebar
+        tk.Label(self.sidebar, text="HEALTH.SYS", font=("Consolas", 18, "bold"), bg=TH["bg2"], fg=TH["accent"]).pack(pady=(30, 40))
 
-        tab_schedule = tk.Frame(notebook, bg=TH["bg"])
-        tab_toast = tk.Frame(notebook, bg=TH["bg"])
-        notebook.add(tab_schedule, text="Schedule & General")
-        notebook.add(tab_toast, text="Toast Design")
+        # Content Area
+        self.content_area = tk.Frame(main_container, bg=TH["bg"])
+        self.content_area.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        self._build_schedule_tab(tab_schedule)
-        self._build_toast_tab(tab_toast)
+        self.frames = {}
+        
+        # Build Frames
+        f_sched = tk.Frame(self.content_area, bg=TH["bg"])
+        f_toast = tk.Frame(self.content_area, bg=TH["bg"])
+        
+        self.frames["Schedule"] = f_sched
+        self.frames["Toast FX"] = f_toast
 
+        self._build_schedule_tab(f_sched)
+        self._build_toast_tab(f_toast)
+        
+        self.current_frame = None
+        self.nav_buttons = {}
+
+        def switch_tab(name):
+            if self.current_frame:
+                self.current_frame.pack_forget()
+                self.nav_buttons[self.current_frame_name].config(bg=TH["bg2"], fg=TH["fg_dim"])
+            
+            self.current_frame = self.frames[name]
+            self.current_frame_name = name
+            self.current_frame.pack(fill=tk.BOTH, expand=True, padx=32, pady=24)
+            self.nav_buttons[name].config(bg=TH["bg3"], fg=TH["accent"])
+
+        # Navigation Buttons
+        for name in ["Schedule", "Toast FX"]:
+            btn = tk.Button(
+                self.sidebar, text=f"■ {name.upper()}", font=("Consolas", 11, "bold"),
+                bg=TH["bg2"], fg=TH["fg_dim"], activebackground=TH["bg3"], activeforeground=TH["accent"],
+                relief=tk.FLAT, cursor="hand2", anchor="w", padx=24, pady=12,
+                command=lambda n=name: switch_tab(n)
+            )
+            btn.pack(fill=tk.X, pady=4)
+            self.nav_buttons[name] = btn
+
+        # Save Button in Sidebar (Bottom)
         tk.Button(
-            root, text="💾 Save Settings", font=("Segoe UI", 12, "bold"),
-            bg=TH["accent"], fg="white", relief=tk.FLAT, cursor="hand2",
-            command=lambda: self._save_and_close(root), padx=20, pady=8,
-        ).pack(pady=(10, 20))
+            self.sidebar, text="[ SAVE_CFG ]", font=("Consolas", 12, "bold"),
+            bg=TH["accent"], fg=TH["bg"], activebackground=TH["accent_hover"], activeforeground=TH["bg"],
+            relief=tk.FLAT, cursor="hand2", pady=12,
+            command=lambda: self._save_and_close(root)
+        ).pack(side=tk.BOTTOM, fill=tk.X, padx=16, pady=24)
+
+        # Init First Tab
+        switch_tab("Schedule")
 
         root.update_idletasks()
-        root.geometry(f"450x{root.winfo_reqheight()}")
-        root.mainloop()
+        root.geometry("900x650")
 
     def _add_field(self, parent_frame, label, key, row, is_str=False):
         tk.Label(
-            parent_frame, text=label, font=("Segoe UI", 10),
-            bg=TH["bg"], fg=TH["fg"], anchor=tk.W,
-        ).grid(row=row, column=0, sticky=tk.W, pady=4)
+            parent_frame, text=label.upper(), font=("Consolas", 9),
+            bg=TH["bg"], fg=TH["fg_dim"], anchor=tk.W,
+        ).grid(row=row, column=0, sticky=tk.W, pady=8)
 
         var = tk.StringVar(value=str(self.settings.get(key, "")))
         tk.Entry(
-            parent_frame, textvariable=var, font=("Segoe UI", 10),
-            bg=TH["bg2"], fg=TH["fg"], insertbackground=TH["accent"],
+            parent_frame, textvariable=var, font=("Consolas", 10),
+            bg=TH["bg"], fg=TH["fg"], insertbackground=TH["accent"],
             relief=tk.FLAT, highlightthickness=1,
             highlightcolor=TH["accent"], highlightbackground=TH["border"],
-            width=12,
-        ).grid(row=row, column=1, sticky=tk.E, pady=4, padx=(10, 0))
+            width=14,
+        ).grid(row=row, column=1, sticky=tk.E, pady=8, padx=(20, 0))
 
         self.entries[key] = (var, is_str)
         if key.startswith("toast_"):
@@ -1072,15 +1100,15 @@ class SettingsWindow:
 
     def _add_combo(self, parent_frame, label, key, row, values):
         tk.Label(
-            parent_frame, text=label, font=("Segoe UI", 10),
-            bg=TH["bg"], fg=TH["fg"], anchor=tk.W,
-        ).grid(row=row, column=0, sticky=tk.W, pady=4)
+            parent_frame, text=label.upper(), font=("Consolas", 9),
+            bg=TH["bg"], fg=TH["fg_dim"], anchor=tk.W,
+        ).grid(row=row, column=0, sticky=tk.W, pady=8)
 
         var = tk.StringVar(value=self.settings.get(key, values[0]))
         ttk.Combobox(
             parent_frame, textvariable=var, values=values,
-            font=("Segoe UI", 10), state="readonly", width=10,
-        ).grid(row=row, column=1, sticky=tk.E, pady=4, padx=(10, 0))
+            font=("Consolas", 10), state="readonly", width=12,
+        ).grid(row=row, column=1, sticky=tk.E, pady=8, padx=(20, 0))
 
         self.entries[key] = (var, True)
         if key.startswith("toast_"):
@@ -1088,9 +1116,9 @@ class SettingsWindow:
 
     def _add_color_field(self, parent_frame, label, key, row):
         tk.Label(
-            parent_frame, text=label, font=("Segoe UI", 10),
-            bg=TH["bg"], fg=TH["fg"], anchor=tk.W,
-        ).grid(row=row, column=0, sticky=tk.W, pady=4)
+            parent_frame, text=label.upper(), font=("Consolas", 9),
+            bg=TH["bg"], fg=TH["fg_dim"], anchor=tk.W,
+        ).grid(row=row, column=0, sticky=tk.W, pady=8)
 
         var = tk.StringVar(value=str(self.settings.get(key, "")))
         
@@ -1104,7 +1132,7 @@ class SettingsWindow:
             parent_frame, bg=var.get(), width=10, relief=tk.FLAT,
             cursor="hand2", command=choose_color
         )
-        btn.grid(row=row, column=1, sticky=tk.E, pady=4, padx=(10, 0))
+        btn.grid(row=row, column=1, sticky=tk.E, pady=8, padx=(20, 0))
 
         self.entries[key] = (var, True)
         if key.startswith("toast_"):
@@ -1113,10 +1141,10 @@ class SettingsWindow:
     def _add_chk(self, parent, label, key):
         var = tk.BooleanVar(value=self.settings.get(key, True))
         tk.Checkbutton(
-            parent, text=label, variable=var,
-            font=("Segoe UI", 9), bg=TH["bg"], fg=TH["fg"],
-            selectcolor=TH["bg2"], activebackground=TH["bg"],
-        ).pack(anchor=tk.W)
+            parent, text=label.upper(), variable=var,
+            font=("Consolas", 9), bg=TH["bg"], fg=TH["fg_dim"],
+            selectcolor=TH["bg2"], activebackground=TH["bg"], activeforeground=TH["accent"],
+        ).pack(anchor=tk.W, pady=2)
         self.entries[key] = (var, "bool")
         if key.startswith("toast_"):
             var.trace_add("write", lambda *args: self._schedule_preview())
@@ -1124,68 +1152,85 @@ class SettingsWindow:
     def _add_grid_chk(self, parent_frame, label, key, row):
         var = tk.BooleanVar(value=self.settings.get(key, True))
         tk.Checkbutton(
-            parent_frame, text=label, variable=var,
-            font=("Segoe UI", 10), bg=TH["bg"], fg=TH["fg"],
-            selectcolor=TH["bg2"], activebackground=TH["bg"],
-        ).grid(row=row, column=0, columnspan=2, sticky=tk.W, pady=4)
+            parent_frame, text=label.upper(), variable=var,
+            font=("Consolas", 9), bg=TH["bg"], fg=TH["fg_dim"],
+            selectcolor=TH["bg2"], activebackground=TH["bg"], activeforeground=TH["accent"],
+        ).grid(row=row, column=0, columnspan=2, sticky=tk.W, pady=8)
         self.entries[key] = (var, "bool")
         if key.startswith("toast_"):
             var.trace_add("write", lambda *args: self._schedule_preview())
 
     def _build_schedule_tab(self, tab):
-        f1 = tk.Frame(tab, bg=TH["bg"], pady=10)
+        tk.Label(tab, text="SYSTEM PARAMETERS", font=("Consolas", 14, "bold"), bg=TH["bg"], fg=TH["fg"]).pack(anchor=tk.W, pady=(0, 20))
+        
+        # We will split it into two columns or just standard grid
+        f1 = tk.Frame(tab, bg=TH["bg"])
         f1.pack(fill=tk.X)
 
         self._add_field(f1, "Short break interval (min):", "short_break_interval_min", 0)
         self._add_field(f1, "Short break duration (sec):", "short_break_duration_sec", 1)
         self._add_field(f1, "Long break interval (min):", "long_break_interval_min", 2)
         self._add_field(f1, "Long break duration (sec):", "long_break_duration_sec", 3)
-        self._add_field(f1, "Pre-warning (sec before break):", "pre_warning_sec", 4)
+        self._add_field(f1, "Pre-warning (sec):", "pre_warning_sec", 4)
         self._add_field(f1, "Latitude:", "latitude", 5)
         self._add_field(f1, "Longitude:", "longitude", 6)
 
         audio_sources = ["default", "random", "campfire", "forest", "night", "ocean", "rain", "waterfall"]
         self._add_combo(f1, "Break Audio Source:", "break_audio_source", 7, audio_sources)
-        self._add_field(f1, "Night light start hour (0-23):", "night_light_start_hour", 8)
-        self._add_field(f1, "Night light end hour (0-23):", "night_light_end_hour", 9)
+        self._add_field(f1, "Night light start hr (0-23):", "night_light_start_hour", 8)
+        self._add_field(f1, "Night light end hr (0-23):", "night_light_end_hour", 9)
 
-        chk_frame = tk.Frame(tab, bg=TH["bg"], pady=10)
+        tk.Label(tab, text="MODULES", font=("Consolas", 14, "bold"), bg=TH["bg"], fg=TH["fg"]).pack(anchor=tk.W, pady=(30, 10))
+
+        chk_frame = tk.Frame(tab, bg=TH["bg"])
         chk_frame.pack(fill=tk.X)
 
         self._add_chk(chk_frame, "Enable breathing sound", "enable_sound")
         self._add_chk(chk_frame, "Dim screen during breaks", "enable_dimming")
-        self._add_chk(chk_frame, "Weather-based color temperature", "enable_weather_warmth")
-        self._add_chk(chk_frame, "Run breaks during games/fullscreen", "run_during_game")
+        self._add_chk(chk_frame, "Weather-based color temp", "enable_weather_warmth")
+        self._add_chk(chk_frame, "Run breaks during games", "run_during_game")
 
     def _build_toast_tab(self, tab):
-        f2 = tk.Frame(tab, bg=TH["bg"], pady=10)
-        f2.pack(fill=tk.X)
+        tk.Label(tab, text="UI / UX CONFIG", font=("Consolas", 14, "bold"), bg=TH["bg"], fg=TH["fg"]).pack(anchor=tk.W, pady=(0, 10))
+        
+        # Grid frame and Preview frame
+        f_top = tk.Frame(tab, bg=TH["bg"])
+        f_top.pack(fill=tk.BOTH, expand=True)
+        
+        # Need two columns of inputs for toast to save vertical space
+        f2_left = tk.Frame(f_top, bg=TH["bg"])
+        f2_left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 20))
+        
+        f2_right = tk.Frame(f_top, bg=TH["bg"])
+        f2_right.pack(side=tk.LEFT, fill=tk.Y)
 
-        self._add_combo(f2, "Position:", "toast_pos", 0, ["Left", "Center", "Right"])
-        self._add_combo(f2, "Animation:", "toast_anim_style", 1, ["Slide", "Fade"])
-        self._add_field(f2, "Width (px):", "toast_width", 2)
-        self._add_field(f2, "Height (px):", "toast_height", 3)
-        self._add_color_field(f2, "Background Color:", "toast_bg_color", 4)
-        self._add_color_field(f2, "Text Color:", "toast_fg_color", 5)
-        self._add_field(f2, "Font Size:", "toast_font_size", 6)
-        self._add_combo(f2, "Font Weight:", "toast_font_weight", 7, ["normal", "bold"])
-        self._add_field(f2, "Emoji Icon:", "toast_emoji", 8, is_str=True)
-        self._add_field(f2, "Border Radius (px):", "toast_radius", 9)
-        self._add_field(f2, "Padding X (px):", "toast_padding_x", 10)
-        self._add_field(f2, "Padding Y (px):", "toast_padding_y", 11)
-        self._add_field(f2, "Opacity (0.1 - 1.0):", "toast_opacity", 12)
-        self._add_field(f2, "Border Width (px):", "toast_border_width", 13)
-        self._add_color_field(f2, "Border Color:", "toast_border_color", 14)
-        self._add_grid_chk(f2, "Play Warning Sound", "toast_enable_sound", 15)
+        self._add_combo(f2_left, "Position:", "toast_pos", 0, ["Left", "Center", "Right"])
+        self._add_combo(f2_left, "Animation:", "toast_anim_style", 1, ["Slide", "Fade"])
+        self._add_field(f2_left, "Width (px):", "toast_width", 2)
+        self._add_field(f2_left, "Height (px):", "toast_height", 3)
+        self._add_color_field(f2_left, "Background Color:", "toast_bg_color", 4)
+        self._add_color_field(f2_left, "Text Color:", "toast_fg_color", 5)
+        self._add_field(f2_left, "Font Size:", "toast_font_size", 6)
+        self._add_combo(f2_left, "Font Weight:", "toast_font_weight", 7, ["normal", "bold"])
+        
+        self._add_field(f2_right, "Emoji Icon:", "toast_emoji", 0, is_str=True)
+        self._add_field(f2_right, "Border Radius (px):", "toast_radius", 1)
+        self._add_field(f2_right, "Padding X (px):", "toast_padding_x", 2)
+        self._add_field(f2_right, "Padding Y (px):", "toast_padding_y", 3)
+        self._add_field(f2_right, "Opacity (0.1 - 1.0):", "toast_opacity", 4)
+        self._add_field(f2_right, "Border Width (px):", "toast_border_width", 5)
+        self._add_color_field(f2_right, "Border Color:", "toast_border_color", 6)
+        self._add_grid_chk(f2_right, "Play Warning Sound", "toast_enable_sound", 7)
 
-        btn_frame = tk.Frame(f2, bg=TH["bg"])
-        btn_frame.grid(row=16, column=0, columnspan=2, pady=15)
+        btn_frame = tk.Frame(tab, bg=TH["bg"])
+        btn_frame.pack(fill=tk.X, pady=20)
         
         tk.Button(
-            btn_frame, text="👀 Preview Toast", font=("Segoe UI", 10, "bold"),
-            bg=TH["bg2"], fg=TH["accent"], relief=tk.FLAT, cursor="hand2",
-            command=self._preview_toast, padx=15, pady=5,
-        ).pack()
+            btn_frame, text="[ PREVIEW_UI ]", font=("Consolas", 10, "bold"),
+            bg=TH["bg2"], fg=TH["accent"], activebackground=TH["bg3"], activeforeground=TH["accent"],
+            relief=tk.FLAT, cursor="hand2",
+            command=self._preview_toast, padx=20, pady=8,
+        ).pack(side=tk.RIGHT)
 
     def _schedule_preview(self):
         if hasattr(self, '_preview_timer') and self._preview_timer:
@@ -1215,7 +1260,7 @@ class SettingsWindow:
                 pass
                 
         # Use duration=0 for infinite preview
-        self.preview_instance = WarningToast(self.parent, "This is a preview!", 0, temp_settings)
+        self.preview_instance = WarningToast(self.parent, "SIMULATED OVERLOAD", 0, temp_settings)
         self.preview_instance.show()
 
     def _save_and_close(self, root):
@@ -1238,7 +1283,6 @@ class SettingsWindow:
         self.on_save(self.settings)
         root.grab_release()
         root.destroy()
-
 
 # ══════════════════════════════════════════════════════════
 #  Tray Icon

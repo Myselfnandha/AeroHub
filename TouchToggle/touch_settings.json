@@ -1,0 +1,18 @@
+{
+    "toast_pos": "Left",
+    "toast_anim_style": "Slide",
+    "toast_width": 200,
+    "toast_height": 55,
+    "toast_bg_color": "#000000",
+    "toast_fg_color": "#FFFFFF",
+    "toast_font_size": 10,
+    "toast_font_weight": "normal",
+    "toast_emoji": "\ud83d\udd90\ufe0f",
+    "toast_radius": 18,
+    "toast_padding_x": 12,
+    "toast_padding_y": 10,
+    "toast_opacity": 1.0,
+    "toast_border_width": 0,
+    "toast_border_color": "#000000",
+    "toast_enable_sound": false
+}

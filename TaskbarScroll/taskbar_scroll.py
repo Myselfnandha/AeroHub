@@ -88,7 +88,7 @@ class TaskbarScrollApp:
         self.settings_window.configure(bg=TH["bg"])
         self.settings_window.resizable(False, False)
         
-        self.settings_window.geometry(f"320x250")
+        self.settings_window.geometry("320x250")
         try:
             self._apply_dwm_rounding(int(self.settings_window.wm_frame(), 16))
         except Exception:
@@ -174,7 +174,7 @@ class TaskbarScrollApp:
                     ctypes.windll.user32.keybd_event(vk_code, 0, 0, 0)
                     ctypes.windll.user32.keybd_event(vk_code, 0, 2, 0)
                     
-        except Exception as e:
+        except Exception:
             pass
 
     def open_settings(self, icon, item):

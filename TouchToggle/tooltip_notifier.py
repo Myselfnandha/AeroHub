@@ -1,148 +1,189 @@
 import sys
+import os
+import json
 import tkinter as tk
 import ctypes
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SETTINGS_FILE = os.path.join(SCRIPT_DIR, "touch_settings.json")
+
+def load_settings(is_preview=False):
+    path = os.path.join(SCRIPT_DIR, "temp_preview.json") if is_preview else SETTINGS_FILE
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f: return json.load(f)
+        except Exception: pass
+    
+    return {
+        "toast_pos": "Center", "toast_anim_style": "Slide",
+        "toast_width": 260, "toast_height": 60,
+        "toast_bg_color": "#18181B", "toast_fg_color": "#FFFFFF",
+        "toast_font_size": 11, "toast_font_weight": "bold",
+        "toast_emoji": "🖐️", "toast_radius": 15,
+        "toast_padding_x": 12, "toast_padding_y": 10,
+        "toast_opacity": 0.95, "toast_border_width": 1,
+        "toast_border_color": "#27272A", "toast_enable_sound": False
+    }
+
 def main():
-    if len(sys.argv) < 2:
-        return
+    if len(sys.argv) < 2: return
     text = sys.argv[1]
     
-    # Parse state: check if passed in argv[2] or deduce from text
     state = "on"
     if len(sys.argv) > 2:
         state = sys.argv[2].lower()
     else:
         if "off" in text.lower() or "disabled" in text.lower():
             state = "off"
+            
+    is_preview = len(sys.argv) > 3 and sys.argv[3] == "1"
+    settings = load_settings(is_preview)
+    
+    if is_preview:
+        try: os.remove(os.path.join(SCRIPT_DIR, "temp_preview.json"))
+        except Exception: pass
 
     root = tk.Tk()
     root.withdraw()
     root.overrideredirect(True)
     root.attributes("-topmost", True)
-    root.config(bg="#000001", borderwidth=0, highlightthickness=0, relief="flat")
-    # Make the #000001 background completely transparent
-    root.attributes("-transparentcolor", "#000001")
+    
+    trans_color = "#010203"
+    root.config(bg=trans_color)
+    root.attributes("-transparentcolor", trans_color)
+    root.attributes("-alpha", 0.0)
 
-    # Dimensions for two-line layout with icon
-    w, h = 260, 60
+    tw = int(settings.get("toast_width", 260))
+    th = int(settings.get("toast_height", 60))
+    pos = settings.get("toast_pos", "Center").lower()
+    bg_col = settings.get("toast_bg_color", "#18181B")
+    fg_col = settings.get("toast_fg_color", "#ffffff")
+    font_size = int(settings.get("toast_font_size", 11))
+    font_weight = settings.get("toast_font_weight", "bold")
+    emoji = settings.get("toast_emoji", "🖐️")
+    radius = int(settings.get("toast_radius", 15))
+    padx = int(settings.get("toast_padding_x", 12))
+    pady = int(settings.get("toast_padding_y", 10))
+    anim_style = settings.get("toast_anim_style", "slide").lower()
+    opacity = float(settings.get("toast_opacity", 0.95))
+    border_width = int(settings.get("toast_border_width", 1))
+    border_color = settings.get("toast_border_color", "#27272A")
+
     sw = root.winfo_screenwidth()
-    
-    class RECT(ctypes.Structure):
-        _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long), ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
-    
-    rect = RECT()
-    SPI_GETWORKAREA = 48
-    ctypes.windll.user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(rect), 0)
-    
-    x = (sw - w) // 2
-    y_target = rect.bottom - h - 15
-    y_start = rect.bottom - h + 15 # Slide up by 30px
-    
-    root.geometry(f"{w}x{h}+{x}+{y_start}")
-    
-    canvas = tk.Canvas(root, width=w, height=h, bg="#000001", highlightthickness=0, borderwidth=0)
-    canvas.pack(fill="both", expand=True)
+    final_y = 60
 
-    # Function to draw a smooth rounded rectangle on the canvas
-    def create_round_rect(x1, y1, x2, y2, radius=15, **kwargs):
-        points = [
-            x1+radius, y1,   x1+radius, y1,   x2-radius, y1,   x2-radius, y1,
-            x2, y1,          x2, y1+radius,   x2, y1+radius,   x2, y2-radius,
-            x2, y2-radius,   x2, y2,          x2-radius, y2,   x2-radius, y2,
-            x1+radius, y2,   x1+radius, y2,   x1, y2,          x1, y2-radius,
-            x1, y2-radius,   x1, y1+radius,   x1, y1+radius,   x1, y1
-        ]
-        return canvas.create_polygon(points, **kwargs, smooth=True)
-
-    # Draw the premium pill background with border
-    create_round_rect(1, 1, w-1, h-1, radius=15, fill="#18181B", outline="#27272A", width=1)
-    
-    # Draw the status-based icon
-    # Circular icon backdrop container on the left
-    canvas.create_oval(12, 12, 48, 48, fill="#27272A", outline="")
-    
-    if state == "on":
-        color = "#10B981" # Emerald Green
-        # Draw tap rings
-        canvas.create_oval(25, 17, 35, 27, outline=color, width=1.5)
-        canvas.create_oval(21, 13, 39, 31, outline=color, width=1)
-        
-        # Pointing finger hand
-        # Index finger
-        canvas.create_line(30, 22, 30, 34, fill="white", width=4, capstyle="round")
-        # Fist/Palm
-        canvas.create_polygon([24, 32, 36, 32, 38, 42, 34, 45, 26, 45, 22, 42], fill="white", outline="")
-        # Thumb
-        canvas.create_line(24, 35, 20, 33, fill="white", width=3, capstyle="round")
+    if pos == "left":
+        final_x = 20
+        start_x, start_y = -tw - 10, final_y
+    elif pos == "right":
+        final_x = sw - tw - 20
+        start_x, start_y = sw + 10, final_y
     else:
-        color = "#EF4444" # Crimson Red
-        
-        # Pointing finger hand (grayed out)
-        canvas.create_line(30, 22, 30, 34, fill="#A1A1AA", width=4, capstyle="round")
-        canvas.create_polygon([24, 32, 36, 32, 38, 42, 34, 45, 26, 45, 22, 42], fill="#A1A1AA", outline="")
-        canvas.create_line(24, 35, 20, 33, fill="#A1A1AA", width=3, capstyle="round")
-        
-        # Red strike-through line
-        canvas.create_line(15, 15, 45, 45, fill="#18181B", width=5, capstyle="round")
-        canvas.create_line(16, 16, 44, 44, fill=color, width=3, capstyle="round")
+        final_x = (sw - tw) // 2
+        start_x, start_y = final_x, -th - 10
 
-    # Add the text fields
-    # Title
-    canvas.create_text(60, 20, text="Touch Screen", fill="#FFFFFF", font=("Segoe UI", 10, "bold"), anchor="w")
-    # Status
-    status_text = "Enabled" if state == "on" else "Disabled"
-    canvas.create_text(60, 38, text=status_text, fill=color, font=("Segoe UI", 9, "bold"), anchor="w")
-        
-    root.attributes("-alpha", 0.0) # Start invisible for fade-in animation
-    root.deiconify()
+    if anim_style == "fade":
+        root.geometry(f"{tw}x{th}+{final_x}+{final_y}")
+    else:
+        root.geometry(f"{tw}x{th}+{start_x}+{start_y}")
 
-    # Animation variables
-    steps = 15
-    delay = 15 # ms
-    current_step = 0
+    canvas = tk.Canvas(root, width=tw, height=th, bg=trans_color, highlightthickness=0)
+    canvas.pack(fill=tk.BOTH, expand=True)
 
-    def animate_entrance():
-        nonlocal current_step
-        if current_step < steps:
-            current_step += 1
-            # Easing: ease-out quadratic
-            t = current_step / steps
-            ease_t = t * (2 - t) # 0 to 1
-            
-            curr_alpha = ease_t * 0.95
-            curr_y = int(y_start - ease_t * (y_start - y_target))
-            
-            root.attributes("-alpha", curr_alpha)
-            root.geometry(f"{w}x{h}+{x}+{curr_y}")
-            root.after(delay, animate_entrance)
+    # Draw rounded rect
+    points = [
+        radius, 0, tw - radius, 0,
+        tw, 0, tw, radius,
+        tw, th - radius, tw, th,
+        tw - radius, th, radius, th,
+        0, th, 0, th - radius,
+        0, radius, 0, 0,
+    ]
+    if border_width > 0:
+        canvas.create_polygon(points, smooth=True, fill=bg_col, outline=border_color, width=border_width)
+    else:
+        canvas.create_polygon(points, smooth=True, fill=bg_col)
 
-    def start_exit():
-        steps_exit = 10
-        delay_exit = 15
-        current_step_exit = 0
-        
-        def animate_exit():
-            nonlocal current_step_exit
-            if current_step_exit < steps_exit:
-                current_step_exit += 1
-                t = current_step_exit / steps_exit
-                # Easing: ease-in quadratic
-                ease_t = t * t
-                curr_alpha = 0.95 * (1 - ease_t)
-                curr_y = int(y_target + ease_t * 15)
-                
-                root.attributes("-alpha", curr_alpha)
-                root.geometry(f"{w}x{h}+{x}+{curr_y}")
-                root.after(delay_exit, animate_exit)
-            else:
-                root.destroy()
-        animate_exit()
-
-    # Start the entrance animation
-    animate_entrance()
+    # Text
+    msg_font = ("Segoe UI", font_size, font_weight)
     
-    # Schedule exit after 2.5 seconds
-    root.after(2500, start_exit)
+    # State specific text
+    if state == "off":
+        status_text = "Touch screen disabled"
+        state_col = "#EF4444"
+    else:
+        status_text = "Touch screen enabled"
+        state_col = "#10B981"
+        
+    if is_preview:
+        status_text = "Preview Mode Active"
+        state_col = "#ff8800"
+
+    canvas.create_text(
+        padx + 10, pady, anchor=tk.NW,
+        text=f"{emoji}  {text}",
+        font=msg_font, fill=fg_col,
+    )
+    
+    sub_font = ("Segoe UI", max(8, font_size - 2))
+    canvas.create_text(
+        padx + 10, pady + font_size + 8, anchor=tk.NW,
+        text=status_text,
+        font=sub_font, fill=state_col,
+    )
+
+    root.update_idletasks()
+    
+    closing = False
+    
+    def slide_in(step=0):
+        if closing: return
+        if step <= 20:
+            p = step / 20
+            ease = 1 - (1 - p) ** 3
+            if anim_style == "fade":
+                root.attributes("-alpha", min(opacity, ease * opacity))
+            else:
+                cx = int(start_x + (final_x - start_x) * ease)
+                cy = int(start_y + (final_y - start_y) * ease)
+                try:
+                    root.geometry(f"{tw}x{th}+{cx}+{cy}")
+                    root.attributes("-alpha", min(opacity, ease * opacity))
+                except tk.TclError: pass
+            root.after(16, lambda: slide_in(step + 1))
+        else:
+            root.after(2500, slide_out)
+
+    def slide_out(step=0):
+        nonlocal closing
+        closing = True
+        if step <= 15:
+            p = step / 15
+            ease = p * p
+            if anim_style == "fade":
+                root.attributes("-alpha", max(0, opacity * (1 - ease)))
+            else:
+                cx = int(final_x)
+                cy = int(final_y - ease * 20)
+                try:
+                    root.geometry(f"{tw}x{th}+{cx}+{cy}")
+                    root.attributes("-alpha", max(0, opacity * (1 - ease)))
+                except tk.TclError: pass
+            root.after(16, lambda: slide_out(step + 1))
+        else:
+            root.destroy()
+            
+    # Audio
+    if settings.get("toast_enable_sound", False) and not is_preview:
+        try:
+            import winsound
+            sound_path = os.path.join(SCRIPT_DIR, "resources", "on_pre_break.wav")
+            if os.path.exists(sound_path):
+                winsound.PlaySound(sound_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+        except Exception: pass
+
+    root.deiconify()
+    slide_in(0)
     root.mainloop()
 
 if __name__ == "__main__":
