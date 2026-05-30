@@ -10,7 +10,7 @@ if %errorLevel% == 0 (
 )
 
 set TASKNAME=AeroHub_ElevatedStartup
-set VBS_PATH=C:\Users\NANDHA A\Desktop\UTILITIES\run_aerohub.vbs
+set VBS_PATH=C:\Users\NANDHA A\Desktop\UTILITIES\Launchers\run_aerohub.vbs
 
 echo Removing old scheduled task if exists...
 schtasks /delete /tn "%TASKNAME%" /f >nul 2>&1
