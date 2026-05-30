@@ -144,14 +144,16 @@ CPU/GPU thermal monitoring with a live temperature display in the system tray.
 
 ### 7. Touch Toggle
 
-> `TouchToggle/touch_toggle.py` · ~295 lines
+> `TouchToggle/touch_toggle.py` · ~506 lines
 
 Instantly enables or disables the laptop touchscreen from the system tray.
 
 - **One-Click Toggle** — Left-click the tray icon to toggle the HID touch screen device
 - **Elevated Execution** — Runs `TouchToggle.ps1` via `ShellExecuteExW` with `runas` verb for proper UAC elevation (no extra console window)
 - **State Detection** — Queries `Get-PnpDevice -Class 'HIDClass'` to determine current touch screen status
-- **Visual Feedback** — Green circle (ON) / Red circle (OFF) tray icon with a custom tooltip notification popup
+- **Toast FX Customization** — Sleek animated toast notifications (Slide/Fade) indicating the touchscreen status, with full control over colors, sizing, corner rounding, and border strokes.
+- **Settings GUI** — Dedicated Tkinter dashboard to customize the toast appearance and preview animations in real-time.
+- **Visual Feedback** — Green circle (ON) / Red circle (OFF) tray icon indicating the system state.
 
 ---
 
@@ -219,6 +221,7 @@ UTILITIES/
 │   └── temp_monitor.py
 ├── TouchToggle/            # Touchscreen toggle
 │   ├── touch_toggle.py
+│   ├── touch_settings.json
 │   ├── TouchToggle.ps1
 │   ├── TouchToggle.exe
 │   └── tooltip_notifier.py
