@@ -1,8 +1,29 @@
-.agent
+# Agent / IDE
+.agent/
 .agentignore
+.understand-anything/
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
+dist/
+build/
+
+# Runtime artifacts
 *.log
 *.session
 *.session.backup
+*.db
+
+# Secrets
+.env
+
+# Build artifacts
+*.exe
+*.spec
+
+# OS
+Thumbs.db
+desktop.ini
