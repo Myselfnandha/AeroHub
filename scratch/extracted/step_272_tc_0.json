@@ -1,0 +1,7 @@
+{
+  "CommandLine": "\"python -c \\\"exec(\\\\\\\"import sys\\\\nfor i, l in enumerate(open('HealthApp/health_app.py', encoding='utf-8')):\\\\n if 'nc_toast' in l or 'Night Care' in l:\\\\n  print(str(i+1) + ': ' + l.strip().encode('ascii', 'ignore').decode('ascii'))\\\\\\\")\\\"\"",
+  "Cwd": "\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\"",
+  "WaitMsBeforeAsync": "2000",
+  "toolAction": "\"Searching for Night Care usage\"",
+  "toolSummary": "\"Finding Night Care in health_app.py\""
+}

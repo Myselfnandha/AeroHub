@@ -1,0 +1,1 @@
+"    def __init__(self, parent, settings:\n        dict, on_save):\n        self.parent = parent\n        self.settings = settings\n        self.on_save = on_save\n        self.entries = {}\n        self.frames = {}"

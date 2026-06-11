@@ -1,0 +1,7 @@
+{
+  "CommandLine": "\"python -c \\\"import sys; [print(f'{i+1}: {line.strip().encode(\\\\'ascii\\\\', \\\\'replace\\\\').decode(\\\\'ascii\\\\')}') for i, line in enumerate(open('HealthApp/health_app.py', encoding='utf-8')) if 'nc_toast' in line or 'Night Care' in line]\\\"\"",
+  "Cwd": "\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\"",
+  "WaitMsBeforeAsync": "2000",
+  "toolAction": "\"Searching for Night Care usage\"",
+  "toolSummary": "\"Finding Night Care in health_app.py\""
+}

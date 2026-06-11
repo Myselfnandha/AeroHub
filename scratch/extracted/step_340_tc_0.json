@@ -1,0 +1,10 @@
+{
+  "ArtifactMetadata": "{\"ArtifactType\":\"other\",\"RequestFeedback\":false,\"Summary\":\"Scratch script to search transcript.jsonl for previous health_app.py contents\"}",
+  "CodeContent": "\"import os\\nimport json\\n\\nlog_dir = r\\\"C:\\\\Users\\\\NANDHA A\\\\.gemini\\\\antigravity-ide\\\\brain\\\\1237cb3f-efd0-4a57-b440-f74287d1898a\\\\.system_generated\\\\logs\\\"\\nlog_path = os.path.join(log_dir, \\\"transcript.jsonl\\\")\\n\\nif os.path.exists(log_path):\\n    print(\\\"Transcript found! Searching...\\\")\\n    with open(log_path, \\\"r\\\", encoding=\\\"utf-8\\\") as f:\\n        for i, line in enumerate(f):\\n            if \\\"ensure_sound_effects\\\" in line or \\\"_health_toast_loop\\\" in line:\\n                print(f\\\"Line {i+1} matches!\\\")\\n                try:\\n                    data = json.loads(line)\\n                    # Print preview of the content\\n                    content = str(data.get(\\\"content\\\", \\\"\\\"))[:200]\\n                    print(f\\\"  Type: {data.get('type')}, Content preview: {content}\\\")\\n                except Exception as e:\\n                    print(f\\\"  Error parsing JSON: {e}\\\")\\nelse:\\n    print(f\\\"Transcript not found at {log_path}\\\")\\n\"",
+  "Description": "\"Search transcript.jsonl to find previous edits.\"",
+  "IsArtifact": "false",
+  "Overwrite": "true",
+  "TargetFile": "\"C:\\\\Users\\\\NANDHA A\\\\.gemini\\\\antigravity-ide\\\\brain\\\\1237cb3f-efd0-4a57-b440-f74287d1898a\\\\scratch\\\\search_night_care.py\"",
+  "toolAction": "\"Searching transcript log\"",
+  "toolSummary": "\"Updating search_night_care.py to search logs\""
+}

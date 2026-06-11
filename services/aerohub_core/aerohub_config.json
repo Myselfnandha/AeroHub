@@ -1,0 +1,70 @@
+{
+  "auto_start": true,
+  "restart_delay_sec": 5,
+  "processes": [
+    {
+      "id": "clipboard_manager",
+      "name": "Clipboard Manager",
+      "icon": "\ud83d\udccb",
+      "script": "services/clipboard_manager/ClipboardManager/clipboard_manager.py",
+      "auto_start": true,
+      "enabled": true
+    },
+    {
+      "id": "health_app",
+      "name": "Health App",
+      "icon": "\ud83d\udc41\ufe0f",
+      "script": "services/health_app/health_app.py",
+      "auto_start": true,
+      "enabled": true
+    },
+    {
+      "id": "media_control",
+      "name": "Media Control",
+      "icon": "\ud83c\udfb5",
+      "script": "services/media_control/media_control.py",
+      "auto_start": true,
+      "enabled": true
+    },
+    {
+      "id": "battery_monitor",
+      "name": "Battery Monitor",
+      "icon": "\ud83d\udd0b",
+      "script": "toggles/battery_monitor/battery_monitor.py",
+      "auto_start": true,
+      "enabled": true
+    },
+    {
+      "id": "temp_monitor",
+      "name": "Temp Monitor",
+      "icon": "\ud83c\udf21\ufe0f",
+      "script": "toggles/temp_monitor/temp_monitor.py",
+      "auto_start": true,
+      "enabled": true
+    },
+    {
+      "id": "touch_toggle",
+      "name": "Touch Toggle",
+      "icon": "\ud83d\udc46",
+      "script": "toggles/touch_toggle/touch_toggle.py",
+      "auto_start": true,
+      "enabled": true
+    },
+    {
+      "id": "tg_fdm_proxy",
+      "name": "Telegram FDM Proxy",
+      "icon": "\ud83d\udce1",
+      "script": "services/tg_fdm_proxy/TgFdmProxy/tg_fdm_proxy.py",
+      "auto_start": true,
+      "enabled": true
+    },
+    {
+      "id": "taskbar_scroll_controller",
+      "name": "Taskbar Scroll Controller",
+      "icon": "\ud83d\udd0a",
+      "script": "tools/taskbar_scroll/taskbar_scroll.py",
+      "auto_start": true,
+      "enabled": true
+    }
+  ]
+}

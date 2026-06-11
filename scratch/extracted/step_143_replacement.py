@@ -1,0 +1,1 @@
+"        self._add_chk(chk_frame, \"Dim screen during breaks\", \"enable_dimming\")\n        self._add_chk(chk_frame, \"Run breaks during games\", \"run_during_game\")"

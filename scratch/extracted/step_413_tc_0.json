@@ -1,0 +1,9 @@
+{
+  "CaseInsensitive": "true",
+  "IsRegex": "false",
+  "MatchPerLine": "true",
+  "Query": "\"health_app.py\"",
+  "SearchPath": "\"C:\\\\Users\\\\NANDHA A\\\\.gemini\\\\antigravity-ide\\\\brain\\\\1237cb3f-efd0-4a57-b440-f74287d1898a\\\\.system_generated\\\\logs\\\\transcript.jsonl\"",
+  "toolAction": "\"Searching transcript for health_app.py\"",
+  "toolSummary": "\"Search transcript.jsonl for health_app.py\""
+}

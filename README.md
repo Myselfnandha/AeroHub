@@ -32,6 +32,89 @@ AeroHub_Core (Orchestrator)
 └── TaskbarScroll ────── Scroll-wheel volume control on the Windows taskbar
 ```
 
+### Developer Quickstart
+
+- Install Python 3.12+ and add it to `PATH`
+- Create a local `.env` from `.env.example`
+- Install dependencies:
+
+```powershell
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+- Run in development mode:
+
+```powershell
+./run.ps1 --env dev --port 8555
+```
+
+- Run in production mode:
+
+```powershell
+./run.ps1 --env prod --port 8555
+```
+
+- Run a utility with a consistent wrapper:
+
+```powershell
+./run_utility.ps1 --name BatteryMonitor
+```
+
+- Install AeroHub as a Windows service wrapper:
+
+```powershell
+./Launchers/install_aerohub_service.ps1
+```
+
+- Run AeroHub headless/service mode:
+
+```powershell
+python AeroHub_Core/aerohub.py --service
+```
+
+- Perform a self-update from git and restart AeroHub:
+
+```powershell
+python AeroHub_Core/aerohub.py --self-update
+```
+
+- Install TouchToggle startup service:
+
+```powershell
+./TouchToggle/install_touch_toggle_service.ps1
+```
+
+- Or install/uninstall from the Makefile:
+
+```powershell
+make service-install-touch
+make service-uninstall-touch
+```
+
+- Local control API:
+
+  - `GET http://127.0.0.1:8200/health`
+  - `GET http://127.0.0.1:8200/status`
+  - `GET http://127.0.0.1:8200/metrics`
+  - `GET http://127.0.0.1:8200/control?action=start&service=<id>`
+  - `GET http://127.0.0.1:8200/self-update`
+
+  Use `X-Local-Token: <token>` or `?token=<token>` when `control_token` is configured.
+
+- Validate formatting and linting:
+
+```powershell
+make precommit
+make lint
+```
+
+- Run tests:
+
+```powershell
+make test
+```
+
 ### Key Design Decisions
 
 | Decision | Rationale |

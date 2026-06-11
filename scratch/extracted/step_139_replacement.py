@@ -1,0 +1,1 @@
+"    def _build_toast_tab(self, tab):\n        tk.Label(tab, text=\"UI / UX CONFIG\", font=(\"Consolas\", 14, \"bold\"), bg=TH[\"bg\"], fg=TH[\"fg\"]).pack(anchor=tk.W, pady=(0, 10))"

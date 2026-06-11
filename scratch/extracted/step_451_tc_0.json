@@ -1,0 +1,7 @@
+{
+  "CommandLine": "\"python -c \\\"import sys; f=open('HealthApp/health_app.py', encoding='utf-8'); [print(f'{i+1}: {line.strip()}') for i, line in enumerate(f) if 'loop' in line.lower() or 'brightness' in line.lower() or 'night' in line.lower()]\\\"\"",
+  "Cwd": "\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\"",
+  "WaitMsBeforeAsync": "5000",
+  "toolAction": "\"Checking loops in health_app.py\"",
+  "toolSummary": "\"Search loops in health_app.py\""
+}

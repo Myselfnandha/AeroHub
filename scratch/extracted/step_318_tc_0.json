@@ -1,0 +1,7 @@
+{
+  "CommandLine": "\"python -c \\\"print('ensure_sound_effects' in open('HealthApp/health_app.py', encoding='utf-8').read())\\\"\"",
+  "Cwd": "\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\"",
+  "WaitMsBeforeAsync": "2000",
+  "toolAction": "\"Checking string presence\"",
+  "toolSummary": "\"Checking for ensure_sound_effects\""
+}

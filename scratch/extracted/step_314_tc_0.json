@@ -1,0 +1,7 @@
+{
+  "CommandLine": "\"git diff HealthApp/health_app.py\"",
+  "Cwd": "\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\"",
+  "WaitMsBeforeAsync": "2000",
+  "toolAction": "\"Running git diff for health_app.py\"",
+  "toolSummary": "\"Checking health_app.py diff\""
+}

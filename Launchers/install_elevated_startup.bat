@@ -10,12 +10,13 @@ if %errorLevel% == 0 (
 )
 
 set TASKNAME=AeroHub_ElevatedStartup
-set VBS_PATH=C:\Users\NANDHA A\Desktop\UTILITIES\Launchers\run_aerohub.vbs
+set "VBS_PATH=%~dp0run_aerohub.vbs"
 
 echo Removing old scheduled task if exists...
 schtasks /delete /tn "%TASKNAME%" /f >nul 2>&1
 
 echo Creating new elevated logon scheduled task...
+echo Using: %VBS_PATH%
 :: Create the task in powershell to ensure battery restrictions are disabled
 powershell -NoProfile -Command "$arg = [char]34 + '%VBS_PATH%' + [char]34; $action = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument $arg; $trigger = New-ScheduledTaskTrigger -AtLogOn; $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit 0; $principal = New-ScheduledTaskPrincipal -UserId '%USERNAME%' -LogonType Interactive -RunLevel Highest; $task = New-ScheduledTask -Action $action -Trigger $trigger -Settings $settings -Principal $principal; Register-ScheduledTask -TaskName '%TASKNAME%' -InputObject $task -Force"
 
@@ -27,7 +28,7 @@ if %errorLevel% == 0 (
     echo Starting AeroHub now...
     schtasks /run /tn "%TASKNAME%"
     echo.
-    echo You can close this window now. Touch toggle will now work silently!
+    echo You can close this window now.
 ) else (
     echo.
     echo FAILED to create scheduled task.

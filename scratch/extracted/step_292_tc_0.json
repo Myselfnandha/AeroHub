@@ -1,0 +1,7 @@
+{
+  "CommandLine": "\"python -m py_compile HealthApp/health_app.py\"",
+  "Cwd": "\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\"",
+  "WaitMsBeforeAsync": "2000",
+  "toolAction": "\"Checking file compilation\"",
+  "toolSummary": "\"Compiling health_app.py\""
+}

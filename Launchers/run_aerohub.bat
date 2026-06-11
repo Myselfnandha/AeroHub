@@ -1,4 +1,4 @@
 @echo off
 cd /d "%~dp0\.."
-start "" /B pythonw AeroHub_Core\aerohub.py
+start "" /B pythonw services\aerohub_core\aerohub.py
 exit

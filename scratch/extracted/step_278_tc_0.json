@@ -1,0 +1,10 @@
+{
+  "ArtifactMetadata": "{\"ArtifactType\":\"other\",\"RequestFeedback\":false,\"Summary\":\"Scratch script to find all nc_ or night occurrences in health_app.py\"}",
+  "CodeContent": "\"import os\\nimport sys\\n\\nfilepath = r\\\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\\\\HealthApp\\\\health_app.py\\\"\\nwith open(filepath, \\\"r\\\", encoding=\\\"utf-8\\\") as f:\\n    for i, line in enumerate(f):\\n        if \\\"nc_\\\" in line or \\\"night_\\\" in line or \\\"Night\\\" in line:\\n            clean_line = line.strip().encode(\\\"ascii\\\", \\\"replace\\\").decode(\\\"ascii\\\")\\n            print(f\\\"{i+1}: {clean_line}\\\")\\n\"",
+  "Description": "\"Search health_app.py for night-related variables.\"",
+  "IsArtifact": "false",
+  "Overwrite": "true",
+  "TargetFile": "\"C:\\\\Users\\\\NANDHA A\\\\.gemini\\\\antigravity-ide\\\\brain\\\\1237cb3f-efd0-4a57-b440-f74287d1898a\\\\scratch\\\\search_night_care.py\"",
+  "toolAction": "\"Updating scratch script\"",
+  "toolSummary": "\"Updating search_night_care.py\""
+}

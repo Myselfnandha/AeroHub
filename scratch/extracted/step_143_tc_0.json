@@ -1,0 +1,12 @@
+{
+  "AllowMultiple": "false",
+  "Description": "\"Restore Run breaks during games checkbutton.\"",
+  "EndLine": "1452",
+  "Instruction": "\"Restore Run breaks during games checkbutton.\"",
+  "ReplacementContent": "\"        self._add_chk(chk_frame, \\\"Dim screen during breaks\\\", \\\"enable_dimming\\\")\\n        self._add_chk(chk_frame, \\\"Run breaks during games\\\", \\\"run_during_game\\\")\"",
+  "StartLine": "1451",
+  "TargetContent": "\"        self._add_chk(chk_frame, \\\"Dim screen during breaks\\\", \\\"enable_dimming\\\")\"",
+  "TargetFile": "\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\\\\HealthApp\\\\health_app.py\"",
+  "toolAction": "\"Restoring games run checkbutton\"",
+  "toolSummary": "\"Restore games run checkbutton\""
+}

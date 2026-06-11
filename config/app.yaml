@@ -1,0 +1,19 @@
+app:
+  name: AeroHub
+  env: dev
+  flet_port: 8555
+  health_port: 8100
+  metrics_port: 9100
+  control_port: 8200
+  control_token: ""
+
+logging:
+  path: Logs
+  file: app.log
+  level: INFO
+  max_bytes: 5242880
+  backup_count: 3
+
+sentry:
+  enabled: false
+  dsn: ""
