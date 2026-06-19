@@ -33,7 +33,7 @@ def _early_bootstrap_dns():
 
     if doh_enabled:
         try:
-            from MovieSongDownloader.core.dns_resolver import bootstrap_dns_sync
+            from .core.dns_resolver import bootstrap_dns_sync
 
             bootstrap_dns_sync(dns_provider)
         except Exception as e:

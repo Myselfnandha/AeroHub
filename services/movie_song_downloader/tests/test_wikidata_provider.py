@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch
-from MovieSongDownloader.providers.wikidata_provider import WikidataProvider
-from MovieSongDownloader.core.database import db
+from movie_song_downloader.providers.wikidata_provider import WikidataProvider
+from movie_song_downloader.core.database import db
 
 
 @pytest.mark.asyncio

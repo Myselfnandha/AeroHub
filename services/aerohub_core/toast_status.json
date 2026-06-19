@@ -1,0 +1,13 @@
+{
+  "active_toast_pid": null,
+  "active_toast_end_time": 0.0,
+  "break_warning_active": false,
+  "break_warning_pid": null,
+  "break_warning_end_time": 0.0,
+  "break_active": false,
+  "break_pid": null,
+  "break_end_time": 0.0,
+  "last_break_end_time": 1781846024.2106616,
+  "request_dismiss_at": 1781845992.4546077,
+  "dismiss_sender_id": "5149f77b-4a51-4176-86f0-b5961bd5e924"
+}

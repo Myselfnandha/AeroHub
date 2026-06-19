@@ -1,6 +1,6 @@
 from pathlib import Path
 
-APP_NAME = "MovieSongDownloader"
+APP_NAME = "movie_song_downloader"
 APP_VERSION = "2.0.0"
 
 APP_DIR = Path(__file__).resolve().parent
@@ -26,7 +26,7 @@ APP_LOG_PATH = LOGS_DIR / "app.log"
 DOWNLOADS_LOG_PATH = LOGS_DIR / "downloads.log"
 PROVIDERS_LOG_PATH = LOGS_DIR / "providers.log"
 
-DEFAULT_DOWNLOAD_DIR = str(Path.home() / "Music" / "MovieSongDownloader")
+DEFAULT_DOWNLOAD_DIR = str(Path.home() / "Music" / "movie_song_downloader")
 
 # Data source URLs
 WIKIPEDIA_EN_API = "https://en.wikipedia.org/w/api.php"

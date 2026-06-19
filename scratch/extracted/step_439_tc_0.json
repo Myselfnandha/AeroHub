@@ -1,9 +1,0 @@
-{
-  "CaseInsensitive": "false",
-  "IsRegex": "false",
-  "MatchPerLine": "true",
-  "Query": "\"_scheduler_loop\"",
-  "SearchPath": "\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\\\\HealthApp\\\\health_app.py\"",
-  "toolAction": "\"Searching for _scheduler_loop references\"",
-  "toolSummary": "\"Search _scheduler_loop in health_app.py\""
-}

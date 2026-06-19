@@ -1,8 +1,8 @@
-# MovieSongDownloader/ui/search.py
+# movie_song_downloader/ui/search.py
 
 import reflex as rx
-from MovieSongDownloader.ui.state import AppState
-from MovieSongDownloader.ui import style
+from movie_song_downloader.ui.state import AppState
+from movie_song_downloader.ui import style
 
 
 def movie_search_card(movie: rx.Var[dict]) -> rx.Component:

@@ -16,15 +16,30 @@ class WarningToast:
         self.settings = settings
         self.closing = False
         self.window = None
+        self.pos = "center"
+        self.slot_index = 0
+        import uuid
+        self.toast_id = str(uuid.uuid4())
+        self.created_at = time.time()
 
     def show(self):
         try:
-            from toast_utils import ToastQueue
+            from services.aerohub_core.toast_utils import ToastQueue
             ToastQueue.add(self)
         except Exception:
             self._create_toast()
 
     def _create_toast(self):
+        # Signal any other active toasts to dismiss cross-process
+        try:
+            from services.aerohub_core.toast_utils import read_shared_status, write_shared_status
+            status = read_shared_status()
+            status["request_dismiss_at"] = time.time()
+            status["dismiss_sender_id"] = self.toast_id
+            write_shared_status(status)
+        except Exception:
+            pass
+
         toast = tk.Toplevel(self.parent)
         self.window = toast
         toast.overrideredirect(True)
@@ -35,8 +50,13 @@ class WarningToast:
         toast.attributes("-transparentcolor", trans_color)
         toast.attributes("-alpha", 0.0)
 
+        # Register in active toasts
+        from services.aerohub_core.toast_utils import BaseToast
+        with BaseToast._lock:
+            BaseToast._active_toasts.append(self)
+
         # Register in shared status
-        from toast_utils import read_shared_status, write_shared_status
+        from services.aerohub_core.toast_utils import read_shared_status, write_shared_status
         status = read_shared_status()
         status["active_toast_pid"] = os.getpid()
         status["active_toast_end_time"] = time.time() + self.duration + 2
@@ -70,7 +90,25 @@ class WarningToast:
         pady = min(pady, max(0, th // 2 - 5))
 
         sw = toast.winfo_screenwidth()
-        final_y = 60
+        sh = toast.winfo_screenheight()
+
+        self.pos = pos
+        from services.aerohub_core.toast_utils import BaseToast
+        with BaseToast._lock:
+            occupied_slots = {
+                t.slot_index
+                for t in BaseToast._active_toasts
+                if getattr(t, "pos", None) == self.pos
+            }
+            self.slot_index = 0
+            while self.slot_index in occupied_slots:
+                self.slot_index += 1
+
+            y_offset = self.slot_index * (th + 10)
+            if "bottom" in self.pos:
+                final_y = (sh - th - 50) - y_offset
+            else:
+                final_y = 60 + y_offset
 
         if pos == "left":
             final_x = 20
@@ -101,8 +139,12 @@ class WarningToast:
             if self.closing:
                 return
             self.closing = True
+            from services.aerohub_core.toast_utils import BaseToast
+            with BaseToast._lock:
+                if self in BaseToast._active_toasts:
+                    BaseToast._active_toasts.remove(self)
             try:
-                from toast_utils import read_shared_status, write_shared_status
+                from services.aerohub_core.toast_utils import read_shared_status, write_shared_status
                 status = read_shared_status()
                 if status.get("active_toast_pid") == os.getpid():
                     status["active_toast_pid"] = None
@@ -115,7 +157,7 @@ class WarningToast:
             except Exception:
                 pass
             try:
-                from toast_utils import ToastQueue
+                from services.aerohub_core.toast_utils import ToastQueue
                 ToastQueue.on_toast_closed(self.parent)
             except Exception:
                 pass
@@ -141,6 +183,22 @@ class WarningToast:
         )
         if self.duration > 0:
             self._play_pre_break_sound()
+        self._check_dismiss()
+
+    def _check_dismiss(self):
+        if self.closing or not self.window or not self.window.winfo_exists():
+            return
+        try:
+            from services.aerohub_core.toast_utils import read_shared_status
+            status = read_shared_status()
+            req_dismiss_at = status.get("request_dismiss_at", 0.0)
+            dismiss_sender_id = status.get("dismiss_sender_id", "")
+            if req_dismiss_at > self.created_at and dismiss_sender_id != self.toast_id:
+                self.force_close()
+                return
+        except Exception:
+            pass
+        self.window.after(100, self._check_dismiss)
 
     def _draw_toast_bg(
         self, canvas, tw, th, radius, bg_col, border_width, border_color
@@ -165,14 +223,19 @@ class WarningToast:
     ):
         msg_font = ("Segoe UI", font_size, font_weight)
         sub_font = ("Segoe UI", max(8, font_size - 2))
+        tw = int(self.settings.get("toast_width", 260))
+
+        show_clock = self.settings.get("toast_show_clock", False)
+        clock_str = f" - {time.strftime('%I:%M %p')}" if show_clock else ""
 
         canvas.create_text(
             padx + 10,
             pady,
             anchor=tk.NW,
-            text=f"{emoji}  {self.message}",
+            text=f"{emoji}  {self.message}{clock_str}",
             font=msg_font,
             fill=fg_col,
+            width=tw - (padx + 10) * 2,
         )
         self.countdown_text_id = canvas.create_text(
             padx + 10,
@@ -237,18 +300,82 @@ class WarningToast:
         except Exception:
             pass
 
+    def update_settings(self, settings):
+        self.settings = settings
+        if not self.window or not self.window.winfo_exists():
+            return
+
+        trans_color = "#010203"
+        tw = int(self.settings.get("toast_width", 260))
+        th = int(self.settings.get("toast_height", 60))
+        pos = self.settings.get("toast_pos", "Center").lower()
+        bg_col = self.settings.get("toast_bg_color", "#252525")
+        fg_col = self.settings.get("toast_fg_color", "#ffffff")
+        font_size = int(self.settings.get("toast_font_size", 11))
+        font_weight = self.settings.get("toast_font_weight", "bold")
+        emoji = self.settings.get("toast_emoji", "👁️")
+        radius = int(self.settings.get("toast_radius", 16))
+        padx = int(self.settings.get("toast_padding_x", 12))
+        pady = int(self.settings.get("toast_padding_y", 10))
+        opacity = float(self.settings.get("toast_opacity", 0.92))
+        border_width = int(self.settings.get("toast_border_width", 0))
+        border_color = self.settings.get("toast_border_color", "#7c3aed")
+
+        opacity = max(0.0, min(1.0, opacity))
+        if bg_col == trans_color:
+            bg_col = "#020304"
+        if fg_col == trans_color:
+            fg_col = "#020304"
+        if border_color == trans_color:
+            border_color = "#020304"
+        padx = min(padx, max(0, tw // 2 - 10))
+        pady = min(pady, max(0, th // 2 - 5))
+
+        sw = self.window.winfo_screenwidth()
+        sh = self.window.winfo_screenheight()
+        self.pos = pos
+        y_offset = self.slot_index * (th + 10)
+        if "bottom" in self.pos:
+            final_y = (sh - th - 50) - y_offset
+        else:
+            final_y = 60 + y_offset
+
+        if pos == "left":
+            final_x = 20
+        elif pos == "right":
+            final_x = sw - tw - 20
+        else:
+            final_x = (sw - tw) // 2
+
+        try:
+            self.window.geometry(f"{tw}x{th}+{final_x}+{final_y}")
+            self.window.attributes("-alpha", opacity)
+        except Exception:
+            pass
+
+        self.canvas.delete("all")
+        self.canvas.configure(width=tw, height=th)
+        self._draw_toast_bg(self.canvas, tw, th, radius, bg_col, border_width, border_color)
+        self._draw_toast_text(self.canvas, padx, pady, font_size, font_weight, emoji, fg_col)
 
 
 class BrightnessWarningToast:
-    def __init__(self, parent, settings, on_skip, on_decrease):
+    def __init__(self, parent, settings, on_skip, on_decrease, on_skip_permanent=None, on_skip_duration=None):
         self.parent = parent
         self.settings = settings
         self.on_skip = on_skip
         self.on_decrease = on_decrease
+        self.on_skip_permanent = on_skip_permanent
+        self.on_skip_duration = on_skip_duration
         self.window = None
+        self.pos = "center"
+        self.slot_index = 0
+        import uuid
+        self.toast_id = str(uuid.uuid4())
+        self.created_at = time.time()
 
     def show(self):
-        from toast_utils import is_in_break_period_shared
+        from services.aerohub_core.toast_utils import is_in_break_period_shared
         if is_in_break_period_shared():
             logger.info("Discarding BrightnessWarningToast because we are in a break period.")
             return
@@ -256,13 +383,27 @@ class BrightnessWarningToast:
             self._create_toast()
             return
         try:
-            from toast_utils import ToastQueue
+            from services.aerohub_core.toast_utils import ToastQueue
             ToastQueue.add(self)
         except Exception:
             self._create_toast()
 
     def _create_toast(self):
+        # Signal any other active toasts to dismiss cross-process
+        try:
+            from services.aerohub_core.toast_utils import read_shared_status, write_shared_status
+            status = read_shared_status()
+            status["request_dismiss_at"] = time.time()
+            status["dismiss_sender_id"] = self.toast_id
+            write_shared_status(status)
+        except Exception:
+            pass
+
         self.window = tk.Toplevel(self.parent)
+        
+        from services.aerohub_core.toast_utils import BaseToast
+        with BaseToast._lock:
+            BaseToast._active_toasts.append(self)
         self.window.title("Brightness Warning")
         self.window.overrideredirect(True)
         self.window.attributes("-topmost", True)
@@ -299,6 +440,8 @@ class BrightnessWarningToast:
         pos = self.settings.get("toast_pos", "Center").lower()
         w = int(self.settings.get("bc_toast_width", 320))
         h = int(self.settings.get("bc_toast_height", 145))
+        if h < 180:
+            h = 180
         sw = self.window.winfo_screenwidth()
         sh = self.window.winfo_screenheight()
 
@@ -310,17 +453,29 @@ class BrightnessWarningToast:
         else:
             x = (sw - w) // 2
 
-        if "top" in pos or pos in ("left", "center", "right"):
-            y = padding
-        elif "bottom" in pos:
-            y = sh - h - 50
-        else:
-            y = padding
+        self.pos = pos
+        with BaseToast._lock:
+            occupied_slots = {
+                t.slot_index
+                for t in BaseToast._active_toasts
+                if getattr(t, "pos", None) == self.pos
+            }
+            self.slot_index = 0
+            while self.slot_index in occupied_slots:
+                self.slot_index += 1
+
+            y_offset = self.slot_index * (h + 10)
+            if "top" in pos or pos in ("left", "center", "right"):
+                y = padding + y_offset
+            elif "bottom" in pos:
+                y = (sh - h - 50) - y_offset
+            else:
+                y = padding + y_offset
 
         self.window.geometry(f"{w}x{h}+{x}+{y}")
 
         # Register in shared status
-        from toast_utils import read_shared_status, write_shared_status
+        from services.aerohub_core.toast_utils import read_shared_status, write_shared_status
         status = read_shared_status()
         status["active_toast_pid"] = os.getpid()
         duration = self.settings.get("bc_safe_duration_seconds", 30)
@@ -362,37 +517,8 @@ class BrightnessWarningToast:
             fill=fg_color,
         )
 
-        # We can place buttons using canvas.create_window
-        self._btn_frame = tk.Frame(self.canvas, bg=bg_color)
-        self.canvas.create_window(w // 2, 15 + pady + 75, window=self._btn_frame)
-
-        btn_skip = tk.Button(
-            self._btn_frame,
-            text="SKIP",
-            command=self._skip,
-            bg="#1a233a",
-            fg=fg_color,
-            relief=tk.FLAT,
-            cursor="hand2",
-            padx=15,
-            pady=4,
-        )
-        btn_skip.pack(side=tk.LEFT, padx=10)
-        _add_hover(btn_skip, "#1a233a", bg_color, fg_color, fg_color)
-
-        btn_dec = tk.Button(
-            self._btn_frame,
-            text="DECREASE",
-            command=self._decrease,
-            bg=accent_color,
-            fg="#070b14",
-            relief=tk.FLAT,
-            cursor="hand2",
-            padx=15,
-            pady=4,
-        )
-        btn_dec.pack(side=tk.LEFT, padx=10)
-        _add_hover(btn_dec, accent_color, "#ffffff", "#070b14", "#000000")
+        self._build_buttons(bg_color, fg_color, accent_color, w, pady)
+        self._check_dismiss()
 
         self.window.bind("<Destroy>", self._on_destroy)
 
@@ -445,6 +571,8 @@ class BrightnessWarningToast:
         pos = self.settings.get("toast_pos", "Center").lower()
         w = int(self.settings.get("bc_toast_width", 320))
         h = int(self.settings.get("bc_toast_height", 145))
+        if h < 180:
+            h = 180
         sw = self.window.winfo_screenwidth()
         sh = self.window.winfo_screenheight()
 
@@ -456,12 +584,14 @@ class BrightnessWarningToast:
         else:
             x = (sw - w) // 2
 
+        self.pos = pos
+        y_offset = self.slot_index * (h + 10)
         if "top" in pos or pos in ("left", "center", "right"):
-            y = padding
+            y = padding + y_offset
         elif "bottom" in pos:
-            y = sh - h - 50
+            y = (sh - h - 50) - y_offset
         else:
-            y = padding
+            y = padding + y_offset
 
         try:
             self.window.geometry(f"{w}x{h}+{x}+{y}")
@@ -489,27 +619,7 @@ class BrightnessWarningToast:
             text="Reduce brightness for eye health?", font=("Consolas", 10), fill=fg_color
         )
 
-        if hasattr(self, "_btn_frame") and self._btn_frame:
-            try:
-                self._btn_frame.destroy()
-            except Exception:
-                pass
-        self._btn_frame = tk.Frame(self.canvas, bg=bg_color)
-        self.canvas.create_window(w // 2, 15 + pady + 75, window=self._btn_frame)
-
-        btn_skip = tk.Button(
-            self._btn_frame, text="SKIP", command=self._skip,
-            bg="#1a233a", fg=fg_color, relief=tk.FLAT, cursor="hand2", padx=15, pady=4
-        )
-        btn_skip.pack(side=tk.LEFT, padx=10)
-        _add_hover(btn_skip, "#1a233a", bg_color, fg_color, fg_color)
-
-        btn_dec = tk.Button(
-            self._btn_frame, text="DECREASE", command=self._decrease,
-            bg=accent_color, fg="#070b14", relief=tk.FLAT, cursor="hand2", padx=15, pady=4
-        )
-        btn_dec.pack(side=tk.LEFT, padx=10)
-        _add_hover(btn_dec, accent_color, "#ffffff", "#070b14", "#000000")
+        self._build_buttons(bg_color, fg_color, accent_color, w, pady)
 
     def force_close(self):
         try:
@@ -571,15 +681,70 @@ class BrightnessWarningToast:
             except Exception:
                 pass
             self._auto_close_id = None
+
         if self.on_decrease:
-            self.on_decrease()
+            self.on_decrease(None)
+
         try:
             self.window.destroy()
         except Exception:
             pass
 
+    def update_progress_text(self, current_val):
+        if not self.window or not self.window.winfo_exists():
+            return
+        
+        def run_on_main():
+            try:
+                self.canvas.delete("all")
+                bg_color = self.settings.get("bc_toast_bg_color", "#101625")
+                fg_color = self.settings.get("bc_toast_fg_color", "#e2e8f0")
+                accent_color = self.settings.get("bc_toast_accent_color", "#ff2a2a")
+                radius = int(self.settings.get("bc_toast_radius", 16))
+                bw = int(self.settings.get("bc_toast_border_width", 1))
+                bc = self.settings.get("bc_toast_border_color", "#7c3aed")
+                pady = int(self.settings.get("bc_toast_padding_y", 10))
+                w = int(self.settings.get("bc_toast_width", 320))
+                h = int(self.settings.get("bc_toast_height", 145))
+                if h < 180:
+                    h = 180
+
+                points = [
+                    radius, 0, w - radius, 0, w, 0, w, radius, w, h - radius, w, h,
+                    w - radius, h, radius, h, 0, h, 0, h - radius, 0, radius, 0, 0
+                ]
+                if bw > 0:
+                    self.canvas.create_polygon(points, smooth=True, fill=bg_color, outline=bc, width=bw)
+                else:
+                    self.canvas.create_polygon(points, smooth=True, fill=bg_color)
+
+                target_b = self.settings.get("bc_target_brightness", 2)
+                self.canvas.create_text(
+                    w // 2, 15 + pady, anchor=tk.CENTER,
+                    text="🔆 ADJUSTING BRIGHTNESS", font=("Consolas", 12, "bold"), fill=accent_color
+                )
+                self.canvas.create_text(
+                    w // 2, 15 + pady + 40, anchor=tk.CENTER,
+                    text=f"Decreasing screen brightness: {current_val}% -> {target_b}%", font=("Consolas", 10), fill=fg_color
+                )
+                self.canvas.create_text(
+                    w // 2, 15 + pady + 70, anchor=tk.CENTER,
+                    text="Please wait until target is reached.", font=("Consolas", 9, "italic"), fill=fg_color
+                )
+            except Exception:
+                pass
+
+        try:
+            self.window.after(0, run_on_main)
+        except Exception:
+            pass
+
     def _on_destroy(self, event):
         if event.widget == self.window:
+            from services.aerohub_core.toast_utils import BaseToast
+            with BaseToast._lock:
+                if self in BaseToast._active_toasts:
+                    BaseToast._active_toasts.remove(self)
             if hasattr(self, "_auto_close_id") and self._auto_close_id:
                 try:
                     self.window.after_cancel(self._auto_close_id)
@@ -587,7 +752,7 @@ class BrightnessWarningToast:
                     pass
                 self._auto_close_id = None
             try:
-                from toast_utils import read_shared_status, write_shared_status
+                from services.aerohub_core.toast_utils import read_shared_status, write_shared_status
                 status = read_shared_status()
                 if status.get("active_toast_pid") == os.getpid():
                     status["active_toast_pid"] = None
@@ -597,7 +762,188 @@ class BrightnessWarningToast:
                 pass
             try:
                 if not self.settings.get("is_preview", False):
-                    from toast_utils import ToastQueue
+                    from services.aerohub_core.toast_utils import ToastQueue
                     ToastQueue.on_toast_closed(self.parent)
             except Exception:
                 pass
+
+    def _build_buttons(self, bg_color, fg_color, accent_color, w, pady):
+        if hasattr(self, "_btn_frame") and self._btn_frame:
+            try:
+                self._btn_frame.destroy()
+            except Exception:
+                pass
+        self._btn_frame = tk.Frame(self.canvas, bg=bg_color)
+        self.canvas.create_window(w // 2, 15 + pady + 95, window=self._btn_frame)
+
+        # Row 0: Skip & Decrease
+        btn_skip = tk.Button(
+            self._btn_frame,
+            text="SKIP",
+            command=self._skip,
+            bg="#1a233a",
+            fg=fg_color,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=12,
+            pady=4,
+            font=("Consolas", 9, "bold"),
+        )
+        btn_skip.grid(row=0, column=0, padx=6, pady=4)
+        _add_hover(btn_skip, "#1a233a", bg_color, fg_color, fg_color)
+
+        btn_dec = tk.Button(
+            self._btn_frame,
+            text="DECREASE",
+            command=self._decrease,
+            bg=accent_color,
+            fg="#070b14",
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=12,
+            pady=4,
+            font=("Consolas", 9, "bold"),
+        )
+        btn_dec.grid(row=0, column=1, padx=6, pady=4)
+        _add_hover(btn_dec, accent_color, "#ffffff", "#070b14", "#000000")
+
+        # Row 1: Skip Permanent & Skip For...
+        btn_perm = tk.Button(
+            self._btn_frame,
+            text="SKIP PERM",
+            command=self._skip_permanent_click,
+            bg="#2a1a3a",
+            fg=fg_color,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=12,
+            pady=4,
+            font=("Consolas", 9, "bold"),
+        )
+        btn_perm.grid(row=1, column=0, padx=6, pady=4)
+        _add_hover(btn_perm, "#2a1a3a", bg_color, fg_color, fg_color)
+
+        btn_duration = tk.Button(
+            self._btn_frame,
+            text="SKIP FOR...",
+            command=self._skip_duration_click,
+            bg="#1a3a2a",
+            fg=fg_color,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=12,
+            pady=4,
+            font=("Consolas", 9, "bold"),
+        )
+        btn_duration.grid(row=1, column=1, padx=6, pady=4)
+        _add_hover(btn_duration, "#1a3a2a", bg_color, fg_color, fg_color)
+
+    def _skip_permanent_click(self):
+        if hasattr(self, "_auto_close_id") and self._auto_close_id:
+            try:
+                self.window.after_cancel(self._auto_close_id)
+            except Exception:
+                pass
+            self._auto_close_id = None
+        if self.on_skip_permanent:
+            self.on_skip_permanent()
+        try:
+            self.window.destroy()
+        except Exception:
+            pass
+
+    def _skip_duration_click(self):
+        dialog = tk.Toplevel(self.window)
+        dialog.title("Select Skip Duration")
+        dialog.geometry("280x150")
+        dialog.configure(bg="#101625")
+        dialog.resizable(False, False)
+        dialog.attributes("-topmost", True)
+        
+        try:
+            dx = self.window.winfo_x() + (self.window.winfo_width() - 280) // 2
+            dy = self.window.winfo_y() + (self.window.winfo_height() - 150) // 2
+            dialog.geometry(f"280x150+{dx}+{dy}")
+        except Exception:
+            pass
+
+        tk.Label(
+            dialog,
+            text="SKIP BRIGHTNESS CARE FOR:",
+            font=("Consolas", 10, "bold"),
+            bg="#101625",
+            fg="#ff2a2a",
+        ).pack(pady=(15, 10))
+
+        dur_var = tk.StringVar(value="15 mins")
+        from tkinter import ttk
+        combo = ttk.Combobox(
+            dialog,
+            textvariable=dur_var,
+            values=["15 mins", "30 mins", "1 hour", "2 hours"],
+            state="readonly",
+            font=("Consolas", 10),
+            width=15,
+        )
+        combo.pack(pady=5)
+        combo.focus()
+
+        def confirm():
+            val = dur_var.get()
+            mins = 15
+            if "30" in val:
+                mins = 30
+            elif "1 hour" in val:
+                mins = 60
+            elif "2 hours" in val:
+                mins = 120
+            
+            if self.on_skip_duration:
+                self.on_skip_duration(mins)
+            
+            try:
+                dialog.destroy()
+                self.window.destroy()
+            except Exception:
+                pass
+
+        btn = tk.Button(
+            dialog,
+            text="CONFIRM",
+            font=("Consolas", 10, "bold"),
+            bg="#7c3aed",
+            fg="#ffffff",
+            activebackground="#8b5cf6",
+            activeforeground="#ffffff",
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=15,
+            pady=4,
+            command=confirm,
+        )
+        btn.pack(pady=15)
+        _add_hover(btn, "#7c3aed", "#101625", "#ffffff", "#ffffff")
+
+    def _check_dismiss(self):
+        if not self.window or not self.window.winfo_exists():
+            return
+        try:
+            from services.aerohub_core.toast_utils import read_shared_status
+            status = read_shared_status()
+            req_dismiss_at = status.get("request_dismiss_at", 0.0)
+            dismiss_sender_id = status.get("dismiss_sender_id", "")
+            if req_dismiss_at > self.created_at and dismiss_sender_id != self.toast_id:
+                if hasattr(self, "_auto_close_id") and self._auto_close_id:
+                    try:
+                        self.window.after_cancel(self._auto_close_id)
+                    except Exception:
+                        pass
+                    self._auto_close_id = None
+                try:
+                    self.window.destroy()
+                except Exception:
+                    pass
+                return
+        except Exception:
+            pass
+        self.window.after(100, self._check_dismiss)

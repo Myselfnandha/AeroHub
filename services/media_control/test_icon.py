@@ -46,5 +46,7 @@ def get_icon(path):
 
 im = get_icon(r"C:\Program Files\Mozilla Firefox\firefox.exe")
 if im:
-    im.save("firefox_icon_bg.png")
+    import os
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    im.save(os.path.join(script_dir, "firefox_icon_bg.png"))
     print("Icon saved")

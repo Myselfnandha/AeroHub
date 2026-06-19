@@ -1,7 +1,7 @@
 import pytest
 import json
 from unittest.mock import patch, MagicMock
-from MovieSongDownloader.providers.spotify_provider import SpotifyProvider
+from movie_song_downloader.providers.spotify_provider import SpotifyProvider
 
 
 @pytest.mark.asyncio

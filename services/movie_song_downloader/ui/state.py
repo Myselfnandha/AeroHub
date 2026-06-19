@@ -1,4 +1,4 @@
-# MovieSongDownloader/ui/state.py
+# movie_song_downloader/ui/state.py
 
 import reflex as rx
 import asyncio
@@ -8,16 +8,16 @@ import logging
 from pathlib import Path
 from dataclasses import asdict
 
-from MovieSongDownloader.core.database import db
-from MovieSongDownloader.core.models import Movie, Track
-from MovieSongDownloader.services.movie_service import MovieService
-from MovieSongDownloader.services.soundtrack_service import SoundtrackService
-from MovieSongDownloader.services.watchlist_service import WatchlistService
-from MovieSongDownloader.services.download_service import download_service
-from MovieSongDownloader.core.settings_manager import settings_manager
-from MovieSongDownloader.core.job_queue import job_queue
+from movie_song_downloader.core.database import db
+from movie_song_downloader.core.models import Movie, Track
+from movie_song_downloader.services.movie_service import MovieService
+from movie_song_downloader.services.soundtrack_service import SoundtrackService
+from movie_song_downloader.services.watchlist_service import WatchlistService
+from movie_song_downloader.services.download_service import download_service
+from movie_song_downloader.core.settings_manager import settings_manager
+from movie_song_downloader.core.job_queue import job_queue
 
-logger = logging.getLogger("MovieSongDownloader.State")
+logger = logging.getLogger("movie_song_downloader.State")
 
 
 def to_dict(obj):
@@ -29,6 +29,12 @@ def to_dict(obj):
 class AppState(rx.State):
     # --- Navigation ---
     active_tab: str = "home"
+
+    # Background fetching
+    is_fetching_updates: bool = False
+    has_new_updates: bool = False
+    fetching_status: str = ""
+    new_recent_releases: list[dict] = []
 
     # Subview control for displaying tracks of an album
     selected_movie: dict = {}
@@ -135,24 +141,64 @@ class AppState(rx.State):
             self.watchlist_loading = True
         yield
 
-        # Load releases
+        # 1. Load CACHED releases first for instant display
         try:
             movie_svc = MovieService()
-            movies = await movie_svc.get_today_releases("IN")
+            cached_movies = await movie_svc.get_cached_releases()
             async with self:
-                self.recent_releases = [to_dict(m) for m in movies]
+                self.recent_releases = [to_dict(m) for m in cached_movies]
         except Exception as e:
-            logger.error(f"Error loading home releases: {e}")
+            logger.error(f"Error loading home cached releases: {e}")
             async with self:
                 self.recent_releases = []
+                
         async with self:
             self.releases_loading = False
         yield
+
+        # 2. Trigger background fetch for new releases
+        yield AppState.bg_fetch_updates
 
         # Load watchlist
         await self._reload_watchlist()
         async with self:
             self.watchlist_loading = False
+
+    @rx.event(background=True)
+    async def bg_fetch_updates(self):
+        async with self:
+            self.is_fetching_updates = True
+            self.has_new_updates = False
+            self.new_recent_releases = []
+            self.fetching_status = "Checking for updates..."
+        yield
+
+        async def progress_cb(pct: float, status_msg: str = ""):
+            async with self:
+                if status_msg:
+                    self.fetching_status = status_msg
+            # Yield not needed natively; background task state changes sync automatically.
+
+        try:
+            movie_svc = MovieService()
+            new_movies = await movie_svc.get_today_releases("IN", on_progress=progress_cb)
+            if new_movies:
+                new_releases_dict = [to_dict(m) for m in new_movies]
+                if new_releases_dict != self.recent_releases:
+                    async with self:
+                        self.new_recent_releases = new_releases_dict
+                        self.has_new_updates = True
+        except Exception as e:
+            logger.error(f"Error fetching new updates: {e}")
+            
+        async with self:
+            self.is_fetching_updates = False
+
+    def apply_dashboard_updates(self):
+        if self.new_recent_releases:
+            self.recent_releases = self.new_recent_releases
+        self.has_new_updates = False
+        self.new_recent_releases = []
 
     async def _reload_watchlist(self):
         try:
@@ -293,7 +339,7 @@ class AppState(rx.State):
         spotify_match = re.search(r"spotify\.com/(album|track)/([a-zA-Z0-9]+)", query)
         if spotify_match:
             try:
-                from MovieSongDownloader.providers.spotify_provider import (
+                from movie_song_downloader.providers.spotify_provider import (
                     SpotifyProvider,
                 )
 
@@ -386,7 +432,7 @@ class AppState(rx.State):
         cover_cached = self.selected_album.get("cover_cached_path")
         if cover_url and not cover_cached:
             try:
-                from MovieSongDownloader.core.cache_manager import image_cache
+                from movie_song_downloader.core.cache_manager import image_cache
 
                 cached = await image_cache.get_or_download(cover_url, "cover")
                 if cached:
@@ -442,7 +488,7 @@ class AppState(rx.State):
 
         if cover_url and not cover_cached:
             try:
-                from MovieSongDownloader.core.cache_manager import image_cache
+                from movie_song_downloader.core.cache_manager import image_cache
                 cached = await image_cache.get_or_download(cover_url, "cover")
                 if cached:
                     async with self:
@@ -699,7 +745,7 @@ class AppState(rx.State):
 
         path = self.output_dir
         if not path or not os.path.exists(path):
-            path = str(Path.home() / "Music" / "MovieSongDownloader")
+            path = str(Path.home() / "Music" / "movie_song_downloader")
 
         # Create directory if it doesn't exist
         os.makedirs(path, exist_ok=True)

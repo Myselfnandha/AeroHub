@@ -1,7 +1,0 @@
-{
-  "CommandLine": "\"python -c \\\"import json; f=open(r'C:\\\\Users\\\\NANDHA A\\\\.gemini\\\\antigravity-ide\\\\brain\\\\1237cb3f-efd0-4a57-b440-f74287d1898a\\\\.system_generated\\\\logs\\\\transcript.jsonl', encoding='utf-8'); [print(f'Index: {i}, Step: {data.get(\\\\\\\"step_index\\\\\\\")}, Source: {data.get(\\\\\\\"source\\\\\\\")}, Type: {data.get(\\\\\\\"type\\\\\\\")}, Tool: {data.get(\\\\\\\"tool_calls\\\\\\\")[0].get(\\\\\\\"name\\\\\\\") if data.get(\\\\\\\"tool_calls\\\\\\\") else None}') for i, line in enumerate(f) for data in [json.loads(line)] if data.get(\\\\\\\"tool_calls\\\\\\\") and any('health_app.py' in str(tc) for tc in data.get(\\\\\\\"tool_calls\\\\\\\"))]\\\"\"",
-  "Cwd": "\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\"",
-  "WaitMsBeforeAsync": "5000",
-  "toolAction": "\"Finding health_app.py edits in transcript\"",
-  "toolSummary": "\"Find health_app.py edits in logs\""
-}

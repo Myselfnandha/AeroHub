@@ -3,13 +3,13 @@ import httpx
 import hashlib
 import time
 from typing import List, Dict, Optional, Tuple
-from MovieSongDownloader.core.rate_limiter import rate_limiter, providers_logger
-from MovieSongDownloader.core.cache_manager import api_cache
-from MovieSongDownloader.core.models import Album, Track
+from movie_song_downloader.core.rate_limiter import rate_limiter, providers_logger
+from movie_song_downloader.core.cache_manager import api_cache
+from movie_song_downloader.core.models import Album, Track
 
-logger = logging.getLogger("MovieSongDownloader.MusicBrainzProvider")
+logger = logging.getLogger("movie_song_downloader.MusicBrainzProvider")
 
-USER_AGENT = "MovieSongDownloader/2.0 (contact: nandha.dev@gmail.com)"
+USER_AGENT = "movie_song_downloader/2.0 (contact: nandha.dev@gmail.com)"
 
 
 class MusicBrainzProvider:

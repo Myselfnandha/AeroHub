@@ -1,12 +1,12 @@
 import asyncio
 import logging
 from typing import Optional, List, Dict
-from MovieSongDownloader.core.database import db
-from MovieSongDownloader.core.models import DownloadJob
-from MovieSongDownloader.core.event_bus import event_bus, Event
-from MovieSongDownloader.config import DOWNLOADS_LOG_PATH
+from movie_song_downloader.core.database import db
+from movie_song_downloader.core.models import DownloadJob
+from movie_song_downloader.core.event_bus import event_bus, Event
+from movie_song_downloader.config import DOWNLOADS_LOG_PATH
 
-downloads_logger = logging.getLogger("MovieSongDownloader.Downloads")
+downloads_logger = logging.getLogger("movie_song_downloader.Downloads")
 if not downloads_logger.handlers:
     handler = logging.FileHandler(DOWNLOADS_LOG_PATH, encoding="utf-8")
     handler.setFormatter(

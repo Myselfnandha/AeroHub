@@ -1,0 +1,59 @@
+<!-- MovieSongDownloader/static/watchlist.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Watchlist | Movie Song Downloader</title>
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation Container -->
+        <div id="sidebar-container"></div>
+        
+        <!-- Main Panel Content -->
+        <main class="main-content">
+            <div class="header-title-section">
+                <h1 class="page-title">My Watchlist</h1>
+                <p class="page-description">Track movies and automatically download their soundtracks.</p>
+            </div>
+            
+            <!-- Watchlist Header with Check Button -->
+            <div class="header-row" style="margin-top: 16px;">
+                <h2 class="section-title" style="margin-bottom: 0;">Tracked Movies</h2>
+                <button id="check-watchlist-btn" class="btn btn-primary">
+                    <i class="fa-solid fa-arrows-spin"></i> Check Watchlist
+                </button>
+            </div>
+            
+            <div class="divider"></div>
+            
+            <!-- Watchlist Items -->
+            <div class="watchlist-section" style="width: 100%;">
+                <!-- Loader -->
+                <div id="watchlist-loader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 150px;">
+                    <div class="spinner spinner-lg"></div>
+                </div>
+                
+                <!-- Empty state -->
+                <div id="empty-watchlist-state" class="empty-state" style="display: none;">
+                    <i class="fa-solid fa-bookmark"></i>
+                    <p>Watchlist empty. Search or browse movies to add them here.</p>
+                </div>
+                
+                <!-- List items container -->
+                <div id="watchlist-list" class="list-container" style="display: none;"></div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Shared JS -->
+    <script src="/js/common.js"></script>
+    <!-- Custom Page JS -->
+    <script src="/js/watchlist.js"></script>
+</body>
+</html>

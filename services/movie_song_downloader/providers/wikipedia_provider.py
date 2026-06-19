@@ -5,17 +5,18 @@ import hashlib
 import re
 import datetime
 from typing import List, Optional
-from bs4 import BeautifulSoup
+from scrapling import Selector, AsyncFetcher
+import asyncio
 
-from MovieSongDownloader.providers.base import BaseMovieProvider
-from MovieSongDownloader.core.models import Movie
-from MovieSongDownloader.core.rate_limiter import rate_limiter, providers_logger
-from MovieSongDownloader.core.cache_manager import api_cache
-from MovieSongDownloader.config import WIKIPEDIA_EN_API, WIKIPEDIA_TA_API
+from movie_song_downloader.providers.base import BaseMovieProvider
+from movie_song_downloader.core.models import Movie
+from movie_song_downloader.core.rate_limiter import rate_limiter, providers_logger
+from movie_song_downloader.core.cache_manager import api_cache
+from movie_song_downloader.config import WIKIPEDIA_EN_API, WIKIPEDIA_TA_API
 
-logger = logging.getLogger("MovieSongDownloader.WikipediaProvider")
+logger = logging.getLogger("movie_song_downloader.WikipediaProvider")
 
-USER_AGENT = "MovieSongDownloader/2.0 (contact: nandha.dev@gmail.com)"
+USER_AGENT = "movie_song_downloader/2.0 (contact: nandha.dev@gmail.com)"
 
 
 class WikipediaProvider(BaseMovieProvider):
@@ -121,7 +122,7 @@ class WikipediaProvider(BaseMovieProvider):
                     title=clean_title,
                     year=year,
                     language="ta" if lang == "ta" else None,
-                    overview=BeautifulSoup(snippet, "html.parser").get_text()[:200]
+                    overview=Selector(snippet).get_all_text(separator="", strip=True)[:200]
                     if snippet
                     else None,
                 )
@@ -193,7 +194,7 @@ class WikipediaProvider(BaseMovieProvider):
         return movies
 
     async def _resolve_movie_details_batch(self, movies: List[Movie]) -> List[Movie]:
-        """Resolves Wikipedia poster URLs (with fair-use candidates fallback) and overviews in batch."""
+        """Resolves Wikipedia poster URLs and overviews in batch by scraping each page."""
         if not movies:
             return movies
 
@@ -201,133 +202,32 @@ class WikipediaProvider(BaseMovieProvider):
         if not valid_movies:
             return movies
 
-        batch_size = 40
-        for idx in range(0, len(valid_movies), batch_size):
-            chunk = valid_movies[idx:idx+batch_size]
+        # Use a semaphore to limit concurrent requests
+        sem = asyncio.Semaphore(5)
 
-            # Since MediaWiki API doesn't allow pageids and titles together, split them if both exist
-            pageids = [m.source_id for m in chunk if m.source_id.isdigit()]
-            titles = [m.source_id for m in chunk if not m.source_id.isdigit()]
+        async def resolve_one(m: Movie):
+            async with sem:
+                try:
+                    details = await self.get_movie_details(m.source_id)
+                    if details:
+                        m.overview = details.overview
+                        m.poster_url = details.poster_url
+                        m.title = details.title
+                        if details.year:
+                            m.year = details.year
+                        # Also update the source_id if it got resolved to numeric ID
+                        if details.source_id:
+                            m.source_id = details.source_id
+                except Exception as e:
+                    logger.error(f"Failed to resolve movie details for {m.title}: {e}")
 
-            requests_to_make = []
-            if pageids:
-                requests_to_make.append({"pageids": "|".join(pageids)})
-            if titles:
-                requests_to_make.append({"titles": "|".join(titles)})
-
-            for req_params in requests_to_make:
-                params = {
-                    "action": "query",
-                    "prop": "extracts|pageimages|images",
-                    "exintro": "true",
-                    "explaintext": "true",
-                    "pithumbsize": "500",
-                    **req_params,
-                }
-
-                data = await self._wiki_request(params, lang="en", cache_ttl=86400)
-                if not data or "query" not in data:
-                    continue
-
-                # Track title normalization and redirects
-                requested_to_final = {}
-                query_data = data["query"]
-                for norm in query_data.get("normalized", []):
-                    requested_to_final[norm["from"].lower()] = norm["to"].lower()
-                for redir in query_data.get("redirects", []):
-                    frm = redir["from"].lower()
-                    to = redir["to"].lower()
-                    # update previous mappings that pointed to 'frm'
-                    for req, val in list(requested_to_final.items()):
-                        if val == frm:
-                            requested_to_final[req] = to
-                    requested_to_final[frm] = to
-
-                pages = query_data.get("pages", {})
-                candidate_map = {}
-
-                movie_by_id = {m.source_id: m for m in chunk if m.source_id.isdigit()}
-                movie_by_title = {
-                    m.source_id.lower(): m for m in chunk if not m.source_id.isdigit()
-                }
-
-                for pid, pinfo in pages.items():
-                    title_lower = pinfo.get("title", "").lower()
-
-                    # Lookup movie by ID, or mapped final title, or original title
-                    m = movie_by_id.get(pid)
-                    if not m:
-                        for req, final in requested_to_final.items():
-                            if final == title_lower:
-                                m = movie_by_title.get(req)
-                                if m:
-                                    break
-                        if not m:
-                            m = movie_by_title.get(title_lower)
-
-                    if not m:
-                        continue
-
-                    if pid.isdigit() and int(pid) > 0:
-                        m.source_id = pid
-
-                    m.overview = (
-                        pinfo.get("extract", "")[:500] if pinfo.get("extract") else None
-                    )
-                    poster = pinfo.get("thumbnail", {}).get("source")
-                    if poster:
-                        m.poster_url = poster
-                    else:
-                        candidate = None
-                        for img in pinfo.get("images", []):
-                            img_title = img.get("title", "")
-                            if any(
-                                x in img_title.lower()
-                                for x in [
-                                    ".svg",
-                                    "icon",
-                                    "stub",
-                                    "logo",
-                                    "shackle",
-                                    "magnify",
-                                    "edit-ltr",
-                                ]
-                            ):
-                                continue
-                            if any(
-                                img_title.lower().endswith(ext)
-                                for ext in [".jpg", ".jpeg", ".png"]
-                            ):
-                                candidate = img_title
-                                break
-                        if candidate:
-                            candidate_map[candidate] = m
-
-                if candidate_map:
-                    img_params = {
-                        "action": "query",
-                        "titles": "|".join(candidate_map.keys()),
-                        "prop": "imageinfo",
-                        "iiprop": "url",
-                    }
-                    img_data = await self._wiki_request(
-                        img_params, lang="en", cache_ttl=604800
-                    )
-                    if img_data and "query" in img_data:
-                        img_pages = img_data["query"].get("pages", {})
-                        for _, img_info in img_pages.items():
-                            img_title = img_info.get("title")
-                            if "imageinfo" in img_info and img_info["imageinfo"]:
-                                url_val = img_info["imageinfo"][0].get("url")
-                                m = candidate_map.get(img_title)
-                                if m:
-                                    m.poster_url = url_val
+        await asyncio.gather(*(resolve_one(m) for m in valid_movies), return_exceptions=True)
 
         # Call Wikidata fallback for any movies still missing posters
         missing_poster_movies = [m for m in valid_movies if not m.poster_url]
         if missing_poster_movies:
             try:
-                from MovieSongDownloader.providers.wikidata_provider import (
+                from movie_song_downloader.providers.wikidata_provider import (
                     WikidataProvider,
                 )
 
@@ -354,12 +254,11 @@ class WikipediaProvider(BaseMovieProvider):
         self, source_id: str, region: str = "IN"
     ) -> List[dict]:
         """Extract OTT platform info from Wikipedia infobox."""
-        # Parse the page content for streaming platform mentions
-        page_data = await self._get_page_content(source_id)
-        if not page_data:
+        html = await self._get_page_html_by_id(source_id)
+        if not html:
             return []
 
-        text = page_data.lower()
+        text = Selector(html).get_all_text().lower()
         providers = []
         ott_map = {
             "netflix": {"id": 1, "name": "Netflix"},
@@ -383,107 +282,119 @@ class WikipediaProvider(BaseMovieProvider):
 
     async def get_movie_details(self, source_id: str) -> Optional[Movie]:
         """Fetch detailed movie info from Wikipedia page."""
-        params = {
-            "action": "query",
-            "pageids": source_id,
-            "prop": "extracts|pageimages|images",
-            "exintro": "true",
-            "explaintext": "true",
-            "pithumbsize": "500",
-        }
-        data = await self._wiki_request(params, cache_ttl=604800)
-        if not data or "query" not in data:
+        cache_key = f"wiki_movie_details_scrapling_{source_id}"
+        cached = await api_cache.get(cache_key)
+        if cached is not None:
+            return Movie(
+                source="wikipedia",
+                source_id=cached.get("source_id", source_id),
+                title=cached["title"],
+                year=cached["year"],
+                poster_url=cached["poster_url"],
+                overview=cached["overview"],
+            )
+
+        html = await self._get_page_html_by_id(source_id)
+        if not html:
             return None
 
-        pages = data["query"].get("pages", {})
-        page = pages.get(source_id)
-        if not page or "missing" in page:
-            return None
+        response = Selector(html, url=f"https://en.wikipedia.org/?curid={source_id}" if source_id.isdigit() else f"https://en.wikipedia.org/wiki/{source_id.replace(' ', '_')}")
+        
+        # Extract title from #firstHeading
+        title_element = response.css("#firstHeading::text").get()
+        if not title_element:
+            title_element = response.css("h1::text").get()
+        
+        title_text = str(title_element) if title_element else ""
+        clean_title, year = self._parse_film_title(title_text)
 
-        title = page.get("title", "")
-        clean_title, year = self._parse_film_title(title)
-        poster = page.get("thumbnail", {}).get("source")
+        # Resolve numeric page ID
+        resolved_source_id = source_id
+        shortlink = response.css('link[rel="shortlink"]::attr(href)').get()
+        if shortlink:
+            match = re.search(r'curid=(\d+)', str(shortlink))
+            if match:
+                resolved_source_id = match.group(1)
 
-        if not poster:
-            candidate = None
-            for img in page.get("images", []):
-                img_title = img.get("title", "")
-                if any(
-                    x in img_title.lower()
-                    for x in [
-                        ".svg",
-                        "icon",
-                        "stub",
-                        "logo",
-                        "shackle",
-                        "magnify",
-                        "edit-ltr",
-                    ]
-                ):
-                    continue
-                if any(
-                    img_title.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png"]
-                ):
-                    candidate = img_title
+        # Extract poster
+        poster_url = None
+        img_src = response.css(".infobox-image img::attr(src)").get() or response.css(".infobox img::attr(src)").get()
+        if img_src:
+            poster_url = response.urljoin(str(img_src))
+
+        # Extract overview (first few paragraphs of lead section)
+        overview_parts = []
+        for p in response.css(".mw-parser-output > p"):
+            p_text = p.get_all_text(separator="", strip=True)
+            # Remove citation brackets like [1], [2], etc.
+            p_text = re.sub(r"\[\d+\]", "", p_text)
+            if p_text:
+                overview_parts.append(p_text)
+                if len(" ".join(overview_parts)) >= 500:
                     break
-            if candidate:
-                img_params = {
-                    "action": "query",
-                    "titles": candidate,
-                    "prop": "imageinfo",
-                    "iiprop": "url",
-                }
-                img_data = await self._wiki_request(img_params, cache_ttl=604800)
-                if img_data and "query" in img_data:
-                    img_pages = img_data["query"].get("pages", {})
-                    for _, img_info in img_pages.items():
-                        if "imageinfo" in img_info and img_info["imageinfo"]:
-                            poster = img_info["imageinfo"][0].get("url")
-                            break
+        overview = " ".join(overview_parts)[:500] if overview_parts else None
 
-        extract = page.get("extract", "")
+        movie_dict = {
+            "source_id": resolved_source_id,
+            "title": clean_title,
+            "year": year,
+            "poster_url": poster_url,
+            "overview": overview,
+        }
+        await api_cache.set(cache_key, "wikipedia_movie_details", movie_dict, 604800)
 
         return Movie(
             source="wikipedia",
-            source_id=source_id,
+            source_id=resolved_source_id,
             title=clean_title,
             year=year,
-            poster_url=poster,
-            overview=extract[:500] if extract else None,
+            poster_url=poster_url,
+            overview=overview,
         )
 
     async def _get_page_html(self, title: str, lang: str = "en") -> Optional[str]:
         """Fetch rendered HTML of a Wikipedia page."""
-        params = {
-            "action": "parse",
-            "page": title,
-            "prop": "text",
-        }
-        data = await self._wiki_request(params, lang=lang, cache_ttl=14400)
-        if data and "parse" in data:
-            return data["parse"].get("text", {}).get("*", "")
-        return None
+        return await self._get_page_html_by_id(title, lang=lang)
 
-    async def _get_page_content(self, page_id: str) -> Optional[str]:
-        """Fetch plain text content of a Wikipedia page by ID."""
-        params = {
-            "action": "query",
-            "pageids": page_id,
-            "prop": "extracts",
-            "explaintext": "true",
-        }
-        data = await self._wiki_request(params, cache_ttl=604800)
-        if data and "query" in data:
-            pages = data["query"].get("pages", {})
-            page = pages.get(page_id)
-            if page:
-                return page.get("extract", "")
+    async def _get_page_html_by_id(self, page_id: str, lang: str = "en") -> Optional[str]:
+        """Fetch rendered HTML of a Wikipedia page by page ID or title."""
+        if page_id.isdigit():
+            url = f"https://{lang}.wikipedia.org/?curid={page_id}"
+        else:
+            url = f"https://{lang}.wikipedia.org/wiki/{page_id.replace(' ', '_')}"
+            
+        cache_key = f"wiki_html_id_{lang}_{page_id}"
+        cached = await api_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        await rate_limiter.acquire("wikipedia")
+        t0 = time.time()
+        try:
+            resp = await AsyncFetcher.get(url, headers={"User-Agent": USER_AGENT})
+            ms = int((time.time() - t0) * 1000)
+            if resp.status == 200:
+                html = resp.get()
+                providers_logger.info(
+                    f"provider=wikipedia_id_direct latency={ms}ms success=True"
+                )
+                await api_cache.set(cache_key, "wikipedia_id_direct", html, 604800)
+                return html
+            providers_logger.error(
+                f"provider=wikipedia_id_direct latency={ms}ms success=False status={resp.status}"
+            )
+        except Exception as e:
+            ms = int((time.time() - t0) * 1000)
+            providers_logger.error(
+                f'provider=wikipedia_id_direct latency={ms}ms success=False error="{e}"'
+            )
+            logger.error(f"Wikipedia ID page fetch failed: {e}")
         return None
 
     def _parse_film_list_page(self, html: str) -> List[tuple]:
         """Parse a 'List of Tamil films of YYYY' Wikipedia page.
         Returns a list of (Movie, Optional[datetime.date]) tuples."""
-        soup = BeautifulSoup(html, "lxml")
+        soup = Selector(html)
         movies = []
         import datetime
 
@@ -498,8 +409,8 @@ class WikipediaProvider(BaseMovieProvider):
             header_row = rows[0]
             headers_text = []
             for th in header_row.find_all("th"):
-                colspan = int(th.get("colspan", 1))
-                text = th.get_text(strip=True).lower()
+                colspan = int(th.attrib.get("colspan", 1))
+                text = th.get_all_text(separator="", strip=True).lower()
                 headers_text.extend([text] * colspan)
 
             if "title" not in headers_text:
@@ -532,7 +443,7 @@ class WikipediaProvider(BaseMovieProvider):
                             row_cells[col_idx] = cell
 
                             # Check for rowspan
-                            rowspan_val = cell.get("rowspan")
+                            rowspan_val = cell.attrib.get("rowspan")
                             if rowspan_val:
                                 try:
                                     rowspans[col_idx] = int(rowspan_val) - 1
@@ -541,23 +452,23 @@ class WikipediaProvider(BaseMovieProvider):
 
                 # Update date tracking (Column 0 is month if present, Column 1 is date if present)
                 if row_cells[0] and row_cells[0] != "SPANNED":
-                    current_month = row_cells[0].get_text(strip=True)
+                    current_month = row_cells[0].get_all_text(separator="", strip=True)
                 if row_cells[1] and row_cells[1] != "SPANNED":
-                    current_date_num = row_cells[1].get_text(strip=True)
+                    current_date_num = row_cells[1].get_all_text(separator="", strip=True)
 
                 title_cell = row_cells[title_idx]
                 if title_cell and title_cell != "SPANNED":
                     link = title_cell.find("a")
                     title = (
-                        link.get_text(strip=True)
+                        link.get_all_text(separator="", strip=True)
                         if link
-                        else title_cell.get_text(strip=True)
+                        else title_cell.get_all_text(separator="", strip=True)
                     )
                     title = title.strip()
                     if title and title != "-" and len(title) > 1:
                         # Store page title in source_id temporarily for batch resolution
                         page_title = (
-                            link.get("title") if (link and link.get("title")) else title
+                            link.attrib.get("title") if (link and "title" in link.attrib) else title
                         )
 
                         rel_date = self._parse_wikipedia_date(

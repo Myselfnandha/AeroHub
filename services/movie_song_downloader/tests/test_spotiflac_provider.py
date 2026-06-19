@@ -1,8 +1,8 @@
 import pytest
 import os
 from unittest.mock import patch, MagicMock, AsyncMock
-from MovieSongDownloader.core.models import Track
-from MovieSongDownloader.providers.spotiflac_provider import SpotiFLACProvider
+from movie_song_downloader.core.models import Track
+from movie_song_downloader.providers.spotiflac_provider import SpotiFLACProvider
 
 
 @pytest.mark.asyncio
@@ -68,7 +68,7 @@ async def test_spotiflac_download():
 
     with (
         patch(
-            "MovieSongDownloader.providers.spotiflac_provider.settings_manager.get",
+            "movie_song_downloader.providers.spotiflac_provider.settings_manager.get",
             side_effect=mock_settings_get,
         ),
         patch("asyncio.create_subprocess_exec", return_value=mock_process),
@@ -77,8 +77,10 @@ async def test_spotiflac_download():
         patch("shutil.move", side_effect=mock_move),
         patch("shutil.rmtree"),
     ):
+        test_dir = os.path.dirname(os.path.abspath(__file__))
+        output_dir = os.path.join(test_dir, "test_output")
         result_path = await provider.download(
-            track=track, format="mp3", output_dir="./test_output", filename_template=""
+            track=track, format="mp3", output_dir=output_dir, filename_template=""
         )
 
         assert "spotiflac_result_1nHTOlxSEyyrLH6wzzMJTd.mp3" in result_path

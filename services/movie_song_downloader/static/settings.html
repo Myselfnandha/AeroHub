@@ -1,0 +1,200 @@
+<!-- MovieSongDownloader/static/settings.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings Dashboard | Movie Song Downloader</title>
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation Container -->
+        <div id="sidebar-container"></div>
+        
+        <!-- Main Panel Content -->
+        <main class="main-content">
+            <div class="header-title-section">
+                <h1 class="page-title">Settings Dashboard</h1>
+                <p class="page-description">Configure OMDb API keys, download formats, path templates, and automation.</p>
+            </div>
+            
+            <div class="settings-section">
+                <!-- Group 1: API Keys & Credentials -->
+                <div class="panel-card">
+                    <h2 class="section-title" style="margin-bottom: 0;">API KEYS & CREDENTIALS</h2>
+                    <span style="font-size: 0.8rem; color: var(--color-text-muted);">Wikipedia & JioSaavn integration run automatically. Set optional credentials below.</span>
+                    <div class="divider"></div>
+                    
+                    <!-- OMDb Key -->
+                    <div class="form-group">
+                        <label class="form-label" for="omdb-api-key">OMDb API Key (Required for ratings & cast details)</label>
+                        <input type="password" id="omdb-api-key" class="input-field" placeholder="Get a free key from omdbapi.com">
+                    </div>
+                    
+                    <!-- Deezer ARL -->
+                    <div class="form-group">
+                        <label class="form-label" for="deezer-arl">Deezer ARL Cookie Token (Optional for higher quality Deezer files)</label>
+                        <input type="password" id="deezer-arl" class="input-field" placeholder="Paste your Deezer ARL cookie">
+                    </div>
+                </div>
+                
+                <!-- Group 2: Download Configuration -->
+                <div class="panel-card">
+                    <h2 class="section-title" style="margin-bottom: 0;">DOWNLOAD CONFIGURATION</h2>
+                    <span style="font-size: 0.8rem; color: var(--color-text-muted);">Configure quality, download engines, and lyrics automation.</span>
+                    <div class="divider"></div>
+                    
+                    <!-- Format and Bitrate -->
+                    <div class="flex-row">
+                        <div class="form-group">
+                            <label class="form-label" for="audio-format">Audio Format</label>
+                            <select id="audio-format" class="select-field">
+                                <option value="mp3">mp3</option>
+                                <option value="flac">flac</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="audio-bitrate">MP3 Bitrate (kbps)</label>
+                            <select id="audio-bitrate" class="select-field">
+                                <option value="320">320</option>
+                                <option value="192">192</option>
+                                <option value="128">128</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Download Provider Backend -->
+                    <div class="form-group">
+                        <label class="form-label" for="download-provider">Download Provider Backend</label>
+                        <select id="download-provider" class="select-field">
+                            <option value="spotiflac">spotiflac</option>
+                            <option value="deezspot">deezspot</option>
+                        </select>
+                        <span style="font-size: 0.75rem; color: var(--color-text-muted); margin-top: 4px; line-height: 1.4;">
+                            Priority Details:<br>
+                            • spotiflac: true lossless downloads utilizing Tidal, Qobuz, Deezer, and Amazon. Requires globally installed spotiflac.<br>
+                            • deezspot: fetches and matches JioSaavn direct audio or Deezer links, utilizing yt-dlp/deezload as a backup.
+                        </span>
+                    </div>
+                    
+                    <!-- Switches -->
+                    <div class="toggle-group">
+                        <div class="toggle-row">
+                            <label class="switch">
+                                <input type="checkbox" id="save-lrc-file" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <span class="form-label">Save sidecar .lrc/.txt lyrics file</span>
+                        </div>
+                        
+                        <div class="toggle-row">
+                            <label class="switch">
+                                <input type="checkbox" id="embed-lyrics" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <span class="form-label">Embed lyrics metadata inside audio file</span>
+                        </div>
+                        
+                        <div class="toggle-row">
+                            <label class="switch">
+                                <input type="checkbox" id="auto-download" checked>
+                                <span class="slider"></span>
+                            </label>
+                            <span class="form-label">Auto-download matched soundtracks for watchlist items</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Group 3: File Storage & Output Formatting -->
+                <div class="panel-card">
+                    <h2 class="section-title" style="margin-bottom: 0;">FILE STORAGE & OUTPUT FORMATTING</h2>
+                    <span style="font-size: 0.8rem; color: var(--color-text-muted);">Set output directory and template variables for folders and files.</span>
+                    <div class="divider"></div>
+
+                    <!-- Output Dir Selector -->
+                    <div class="form-group">
+                        <label class="form-label">Music Output Directory</label>
+                        <div style="display: flex; gap: 12px; width: 100%;">
+                            <input type="text" id="output-dir" class="input-field" readOnly style="background-color: rgba(255, 255, 255, 0.02); cursor: not-allowed;">
+                            <button id="browse-dir-btn" class="btn btn-primary">
+                                <i class="fa-solid fa-folder-open"></i> Browse
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Folder and Filename templates -->
+                    <div class="flex-row">
+                        <!-- Folder Template -->
+                        <div class="form-group">
+                            <label class="form-label" for="folder-format-dropdown">Folder Path Template</label>
+                            <select id="folder-format-dropdown" class="select-field">
+                                <option value="{Year}/{Movie}/Songs">{Year}/{Movie}/Songs</option>
+                                <option value="{Movie}">{Movie}</option>
+                                <option value="{Artist}/{Album}">{Artist}/{Album}</option>
+                                <option value="{Movie}/{Songs}">{Movie}/{Songs}</option>
+                                <option value="Custom...">Custom...</option>
+                            </select>
+                            <input type="text" id="folder-format-custom" class="input-field" placeholder="Custom Folder Path (e.g. {Artist}/{Album})" style="display: none; margin-top: 8px;">
+                        </div>
+                        
+                        <!-- Filename Template -->
+                        <div class="form-group">
+                            <label class="form-label" for="filename-format-dropdown">Filename Format Template</label>
+                            <select id="filename-format-dropdown" class="select-field">
+                                <option value="{TrackNum} - {Title}">{TrackNum} - {Title}</option>
+                                <option value="{Title}">{Title}</option>
+                                <option value="{Artist} - {Title}">{Artist} - {Title}</option>
+                                <option value="{TrackNum}. {Title}">{TrackNum}. {Title}</option>
+                                <option value="Custom...">Custom...</option>
+                            </select>
+                            <input type="text" id="filename-format-custom" class="input-field" placeholder="Custom Filename Format (e.g. {TrackNum} - {Title})" style="display: none; margin-top: 8px;">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Save Button Row -->
+                <div style="display: flex; align-items: center; gap: 20px; width: 100%; margin-top: 12px; padding-bottom: 40px;">
+                    <button id="save-settings-btn" class="btn btn-primary" style="padding: 0 40px; min-height: 44px;">Save Settings</button>
+                    <span id="settings-status-msg" style="font-weight: 700; font-size: 0.95rem;"></span>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Modal: Local Folder Explorer (Reused structure) -->
+    <div id="dir-explorer-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 550px;">
+            <h2 class="modal-title">Local Directory Explorer</h2>
+            <p class="modal-description">
+                Browse and select an absolute path on your host machine to store downloads.
+            </p>
+            <div class="modal-body" style="margin-top: 12px;">
+                <div style="display: flex; gap: 8px; font-size: 0.85rem; padding: 4px 0;">
+                    <span style="font-weight: 700; color: var(--color-text-muted);">Current Path:</span>
+                    <span id="current-explorer-path" style="color: var(--color-text-primary); font-family: monospace; word-break: break-all;">/</span>
+                </div>
+                <div class="explorer-list" id="explorer-folder-list">
+                    <button class="explorer-item" id="parent-dir-btn">
+                        <i class="fa-solid fa-folder-open"></i> .. Parent Directory
+                    </button>
+                    <div id="explorer-items-container" style="display: flex; flex-direction: column;"></div>
+                </div>
+                <div id="explorer-error-msg" style="color: var(--color-error); font-size: 0.8rem; display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancel-explorer-btn" class="btn btn-secondary">Cancel</button>
+                <button id="select-folder-btn" class="btn btn-primary">Select Folder</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Shared JS -->
+    <script src="/js/common.js"></script>
+    <!-- Custom Page JS -->
+    <script src="/js/settings.js"></script>
+</body>
+</html>

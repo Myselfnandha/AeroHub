@@ -1,4 +1,4 @@
-from MovieSongDownloader.providers.metadata_normalizer import (
+from movie_song_downloader.providers.metadata_normalizer import (
     normalize_title,
     confidence_score,
 )

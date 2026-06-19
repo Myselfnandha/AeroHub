@@ -2,9 +2,9 @@ import re
 import aiosqlite
 import logging
 from pathlib import Path
-from MovieSongDownloader.config import DATABASE_PATH
+from movie_song_downloader.config import DATABASE_PATH
 
-logger = logging.getLogger("MovieSongDownloader.Database")
+logger = logging.getLogger("movie_song_downloader.Database")
 
 
 class DatabaseManager:

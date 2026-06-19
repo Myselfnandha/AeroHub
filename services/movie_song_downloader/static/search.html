@@ -1,0 +1,63 @@
+<!-- MovieSongDownloader/static/search.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soundtracks Search | Movie Song Downloader</title>
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation Container -->
+        <div id="sidebar-container"></div>
+        
+        <!-- Main Panel Content -->
+        <main class="main-content">
+            <div class="header-title-section">
+                <h1 class="page-title">Soundtracks Search</h1>
+                <p class="page-description">Search Wikipedia for movies, or paste a JioSaavn or Spotify Album link directly.</p>
+            </div>
+            
+            <!-- Search Forms -->
+            <form id="search-form" class="search-form">
+                <input type="text" id="search-query" class="input-field" placeholder="Search movie titles or JioSaavn/Spotify album link..." required>
+                <input type="number" id="search-year" class="input-field input-year" placeholder="Year (Optional)" min="1900" max="2100">
+                <button type="submit" class="btn btn-primary" id="search-submit-btn">
+                    <i class="fa-solid fa-magnifying-glass"></i> Search
+                </button>
+            </form>
+            
+            <div class="divider"></div>
+            
+            <!-- Results Area -->
+            <div class="results-section">
+                <h2 class="section-title">Search Results</h2>
+                
+                <!-- Loader -->
+                <div id="search-loader" style="display: none; flex-direction: column; align-items: center; justify-content: center; height: 200px; gap: 12px;">
+                    <div class="spinner spinner-lg"></div>
+                    <span id="search-loader-text" style="color: var(--color-text-muted); font-size: 0.9rem;">Searching movies / resolving link...</span>
+                </div>
+                
+                <!-- Empty State -->
+                <div id="empty-search-state" class="empty-state">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <p>No results found. Type a query and search.</p>
+                </div>
+                
+                <!-- Grid results -->
+                <div id="search-grid" class="grid-layout" style="display: none;"></div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Shared JS -->
+    <script src="/js/common.js"></script>
+    <!-- Custom Page JS -->
+    <script src="/js/search.js"></script>
+</body>
+</html>

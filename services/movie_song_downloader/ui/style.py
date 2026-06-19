@@ -1,4 +1,4 @@
-# MovieSongDownloader/ui/style.py
+# movie_song_downloader/ui/style.py
 
 # Colors
 COLOR_ACCENT = "#06B6D4"  # Cyan accent

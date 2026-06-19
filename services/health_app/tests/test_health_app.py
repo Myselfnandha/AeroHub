@@ -182,6 +182,8 @@ def test_box_breathing_overlay_cycle():
         "voice_break_type": "Both",
         "voice_min_duration_sec": 5,
         "voice_name": "Default",
+        "voice_start_delay_sec": 0,
+        "voice_pitch": 0,
     }
 
     on_complete = MagicMock()
@@ -241,6 +243,59 @@ def test_box_breathing_overlay_cycle():
     root.destroy()
 
 
+def test_box_breathing_overlay_voice_delay_and_pitch():
+    from ui.overlay import BreakOverlay
+    import tkinter as tk
+    from unittest.mock import MagicMock
+
+    try:
+        root = tk.Tk()
+        root.withdraw()
+    except tk.TclError:
+        pytest.skip("Tkinter/Tcl not fully configured on this system")
+
+    settings = {
+        "voice_prompts_enabled": True,
+        "voice_inhale_sec": 4,
+        "voice_hold_in_sec": 2,
+        "voice_exhale_sec": 3,
+        "voice_hold_out_sec": 1,
+        "voice_inhale_text": "Inhale",
+        "voice_exhale_text": "Exhale",
+        "voice_hold_in_text": "Hold In",
+        "voice_hold_out_text": "Hold Out",
+        "voice_volume": 80,
+        "voice_rate": 0,
+        "voice_break_type": "Both",
+        "voice_min_duration_sec": 5,
+        "voice_name": "Default",
+        "voice_start_delay_sec": 3,
+        "voice_pitch": 2,
+    }
+
+    on_complete = MagicMock()
+    overlay = BreakOverlay(root, duration_sec=20, break_type="short", settings=settings, on_complete=on_complete)
+    overlay._countdown_var = MagicMock()
+    overlay._breathing_var = MagicMock()
+    overlay._breathing_label = MagicMock()
+    overlay.window = MagicMock()
+    overlay._speak_phase = MagicMock()
+
+    # remaining = 20 (elapsed = 0): should show preparation message because elapsed < delay (0 < 3)
+    overlay._remaining = 20
+    overlay._tick_countdown()
+    overlay._breathing_var.set.assert_called_with("Prepare to breathe... 🧘")
+    overlay._speak_phase.assert_not_called()
+
+    # remaining = 17 (elapsed = 3): should start Inhale (cycle_time = 0)
+    overlay._remaining = 17
+    overlay._tick_countdown()
+    overlay._breathing_var.set.assert_called_with("Breathe In... 🌬️")
+    overlay._speak_phase.assert_called_with("Inhale")
+
+    root.destroy()
+
+
 def test_speak_voice_prompts_conditions():
     from ui.overlay import BreakOverlay
     import tkinter as tk
@@ -291,4 +346,50 @@ def test_get_sapi_voices_fallback():
     voices = get_sapi_voices()
     assert isinstance(voices, list)
     assert len(voices) >= 1
+
+
+def test_brightness_care_window_start_recovery():
+    from health_app import HealthApp
+    import datetime
+    from unittest.mock import patch, MagicMock
+
+    app = HealthApp()
+    app.settings["bc_enabled"] = True
+    app.settings["bc_start_time"] = "23:00"
+    app.settings["bc_end_time"] = "06:00"
+    app.settings["bc_target_brightness"] = 10
+    app.settings["bc_aggressive_target_brightness"] = 20
+    app.settings["bc_duration_minutes"] = 60
+    app.settings["bc_aggressive_duration_minutes"] = 10
+
+    # Current time: 01:00 on June 16, 2026
+    mock_now_dt = datetime.datetime(2026, 6, 16, 1, 0, 0)
+    mock_now_ts = mock_now_dt.timestamp()
+
+    with patch("datetime.datetime") as mock_datetime, \
+         patch("time.time", return_value=mock_now_ts), \
+         patch("health_app.SBC_AVAILABLE", True), \
+         patch("health_app.sbc") as mock_sbc, \
+         patch("health_app.system_utils.is_system_awake_and_unlocked", return_value=True), \
+         patch("time.sleep", side_effect=Exception("Stop loop")):
+
+        mock_datetime.now.return_value = mock_now_dt
+        mock_datetime.timedelta = datetime.timedelta
+
+        mock_sbc.get_brightness.return_value = [50]
+
+        try:
+            app._brightness_is_adjusting = False
+            app._running = True
+            app._brightness_care_loop()
+        except Exception as e:
+            assert str(e) == "Stop loop"
+
+        # The queue should have the brightness_care warning triggered immediately because
+        # we assumed the brightness has been high since 23:00 (yesterday), which is 2 hours (120 mins) ago,
+        # exceeding the 10 minute aggressive threshold.
+        assert not app.gui_queue.empty()
+        action, data = app.gui_queue.get_nowait()
+        assert action == "brightness_care"
+        assert data == {"is_aggressive": True}
 

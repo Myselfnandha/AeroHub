@@ -1,13 +1,13 @@
 import logging
 import json
 import asyncio
-from typing import List, Optional, Callable
-from MovieSongDownloader.providers.wikipedia_provider import WikipediaProvider
-from MovieSongDownloader.providers.omdb_provider import OMDbProvider
-from MovieSongDownloader.core.models import Movie, Album, Track
-from MovieSongDownloader.core.database import db
+from typing import List, Optional, Callable, Any
+from movie_song_downloader.providers.wikipedia_provider import WikipediaProvider
+from movie_song_downloader.providers.omdb_provider import OMDbProvider
+from movie_song_downloader.core.models import Movie, Album, Track
+from movie_song_downloader.core.database import db
 
-logger = logging.getLogger("MovieSongDownloader.MovieService")
+logger = logging.getLogger("movie_song_downloader.MovieService")
 
 
 class MovieService:
@@ -56,7 +56,7 @@ class MovieService:
         self, movie: Movie, album: Album, tracks: List[Track]
     ) -> None:
         # Download and cache images to avoid ISP blocking in the Flutter client UI
-        from MovieSongDownloader.core.cache_manager import image_cache
+        from movie_song_downloader.core.cache_manager import image_cache
 
         if movie.poster_url and not movie.poster_cached_path:
             try:
@@ -277,7 +277,7 @@ class MovieService:
         if on_progress:
             on_progress(20.0)
 
-        from MovieSongDownloader.services.soundtrack_service import SoundtrackService
+        from movie_song_downloader.services.soundtrack_service import SoundtrackService
 
         soundtrack_service = SoundtrackService()
 
@@ -379,13 +379,13 @@ class MovieService:
 
                     # Download and cache poster
                     if movie.poster_url:
-                        from MovieSongDownloader.core.cache_manager import image_cache
+                        from movie_song_downloader.core.cache_manager import image_cache
 
                         movie.poster_cached_path = await image_cache.get_or_download(
                             movie.poster_url, "poster"
                         )
 
-                    from MovieSongDownloader.providers.metadata_normalizer import (
+                    from movie_song_downloader.providers.metadata_normalizer import (
                         normalize_title,
                     )
 
@@ -399,7 +399,7 @@ class MovieService:
                         best_album = albums[0]
                         # Cache album cover
                         if best_album.cover_url:
-                            from MovieSongDownloader.core.cache_manager import (
+                            from movie_song_downloader.core.cache_manager import (
                                 image_cache,
                             )
 
@@ -414,7 +414,7 @@ class MovieService:
 
                         # Enrich with MusicBrainz
                         try:
-                            from MovieSongDownloader.providers.musicbrainz_provider import (
+                            from movie_song_downloader.providers.musicbrainz_provider import (
                                 MusicBrainzProvider,
                             )
 
@@ -480,11 +480,24 @@ class MovieService:
             enriched.append(movie)
 
         if on_progress:
-            on_progress(100.0)
+            if asyncio.iscoroutinefunction(on_progress):
+                await on_progress(100.0, "Finished fetching updates")
+            else:
+                on_progress(100.0, "Finished fetching updates")
         return enriched
 
+    async def get_cached_releases(self) -> List[Movie]:
+        """Get recent Tamil releases only from the local database cache."""
+        import datetime
+        current_year = datetime.date.today().year
+        cached_movies = await self._db_get_movies_by_year(current_year)
+        if cached_movies:
+            logger.info(f"Loaded {len(cached_movies)} current year releases from local database cache.")
+            return cached_movies
+        return []
+
     async def get_today_releases(
-        self, region: str = "IN", on_progress: Optional[Callable[[float], None]] = None
+        self, region: str = "IN", on_progress: Optional[Callable[[float, str], Any]] = None
     ) -> List[Movie]:
         """Get recent Tamil releases from Wikipedia, enriched with OMDb and cached in DB in parallel."""
         import datetime
@@ -492,7 +505,7 @@ class MovieService:
         current_date_str = datetime.date.today().isoformat()
         current_year = datetime.date.today().year
 
-        from MovieSongDownloader.core.settings_manager import settings_manager
+        from movie_song_downloader.core.settings_manager import settings_manager
 
         last_fetch_date = await settings_manager.get("last_fetch_date")
 
@@ -505,11 +518,18 @@ class MovieService:
                 current_date_str,
             )
             if on_progress:
-                on_progress(100.0)
+                if asyncio.iscoroutinefunction(on_progress):
+                    await on_progress(100.0, "Up to date")
+                else:
+                    on_progress(100.0, "Up to date")
             return cached_movies
 
+
         if on_progress:
-            on_progress(10.0)
+            if asyncio.iscoroutinefunction(on_progress):
+                await on_progress(10.0, "Scraping Wikipedia releases...")
+            else:
+                on_progress(10.0, "Scraping Wikipedia releases...")
         scraping_limit = int(await settings_manager.get("scraping_limit") or 5)
 
         logger.info(
@@ -541,9 +561,12 @@ class MovieService:
             raise
 
         if on_progress:
-            on_progress(20.0)
+            if asyncio.iscoroutinefunction(on_progress):
+                await on_progress(20.0, "Enriching movie metadata...")
+            else:
+                on_progress(20.0, "Enriching movie metadata...")
 
-        from MovieSongDownloader.services.soundtrack_service import SoundtrackService
+        from movie_song_downloader.services.soundtrack_service import SoundtrackService
 
         soundtrack_service = SoundtrackService()
 
@@ -590,13 +613,13 @@ class MovieService:
 
                     # Download and cache the poster!
                     if movie.poster_url:
-                        from MovieSongDownloader.core.cache_manager import image_cache
+                        from movie_song_downloader.core.cache_manager import image_cache
 
                         movie.poster_cached_path = await image_cache.get_or_download(
                             movie.poster_url, "poster"
                         )
 
-                    from MovieSongDownloader.providers.metadata_normalizer import (
+                    from movie_song_downloader.providers.metadata_normalizer import (
                         normalize_title,
                     )
 
@@ -611,7 +634,7 @@ class MovieService:
                         best_album = albums[0]
                         # Cache cover art
                         if best_album.cover_url:
-                            from MovieSongDownloader.core.cache_manager import (
+                            from movie_song_downloader.core.cache_manager import (
                                 image_cache,
                             )
 
@@ -626,7 +649,7 @@ class MovieService:
 
                         # MusicBrainz enrichment
                         try:
-                            from MovieSongDownloader.providers.musicbrainz_provider import (
+                            from movie_song_downloader.providers.musicbrainz_provider import (
                                 MusicBrainzProvider,
                             )
 
@@ -652,7 +675,7 @@ class MovieService:
                     # Save as a stub entry to the database, but still download and cache the poster immediately
                     if movie.poster_url:
                         try:
-                            from MovieSongDownloader.core.cache_manager import (
+                            from movie_song_downloader.core.cache_manager import (
                                 image_cache,
                             )
 
@@ -674,8 +697,12 @@ class MovieService:
             finally:
                 completed_count += 1
                 if on_progress:
-                    pct = 20.0 + (completed_count / total_movies) * 75.0
-                    on_progress(min(pct, 99.0))
+                    pct = 20.0 + (completed_count / total_movies) * 80.0
+                    msg = f"Processed {completed_count}/{total_movies}: {movie.title}"
+                    if asyncio.iscoroutinefunction(on_progress):
+                        await on_progress(pct, msg)
+                    else:
+                        on_progress(pct, msg)
 
         # Process movies in parallel batches of 10
         batch_size = 10

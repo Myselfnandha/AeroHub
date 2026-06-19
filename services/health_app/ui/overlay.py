@@ -44,8 +44,8 @@ class BreakOverlay:
         try:
             self._dim_screen()
             self._pause_media()
-            self._play_break_audio()
             self._create_overlay_window()
+            self._play_pre_break_chime()
             self._start_countdown()
             self._start_focus_keeper()
         except Exception as e:
@@ -76,6 +76,24 @@ class BreakOverlay:
             pygame.mixer.music.play(-1)
         except Exception as e:
             logger.error(f"Audio play error: {e}")
+
+    def _play_pre_break_chime(self):
+        chime_played = False
+        if self.settings.get("enable_sound"):
+            try:
+                import winsound
+                sound_path = os.path.join(APP_ROOT, "resources", "on_pre_break.wav")
+                if os.path.exists(sound_path):
+                    winsound.PlaySound(sound_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+                    chime_played = True
+            except Exception as e:
+                logger.error(f"Failed to play pre-break chime: {e}")
+        
+        delay_ms = 2000 if chime_played else 0
+        if hasattr(self, "window") and self.window:
+            self.window.after(delay_ms, self._play_break_audio)
+        else:
+            self._play_break_audio()
 
     def _create_overlay_window(self):
         self.window = tk.Toplevel(self.parent)
@@ -196,29 +214,37 @@ class BreakOverlay:
             try:
                 self._countdown_var.set(str(self._remaining))
 
-                T = max(1, self._inhale_sec + self._hold_in_sec + self._exhale_sec + self._hold_out_sec)
-                cycle = (self.duration - self._remaining) % T
+                elapsed = self.duration - self._remaining
+                delay = int(self.settings.get("voice_start_delay_sec", 3))
 
-                if cycle < self._inhale_sec:
-                    self._breathing_var.set("Breathe In... 🌬️")
-                    self._breathing_label.config(fg=TH["success"])
-                    if cycle == 0:
-                        self._speak_phase(self.settings.get("voice_inhale_text", "Breathe in"))
-                elif cycle < self._inhale_sec + self._hold_in_sec:
-                    self._breathing_var.set("Hold... 🛑")
-                    self._breathing_label.config(fg=TH["warning"])
-                    if cycle == self._inhale_sec:
-                        self._speak_phase(self.settings.get("voice_hold_in_text", "Hold"))
-                elif cycle < self._inhale_sec + self._hold_in_sec + self._exhale_sec:
-                    self._breathing_var.set("Breathe Out... 💨")
-                    self._breathing_label.config(fg=TH["accent"])
-                    if cycle == self._inhale_sec + self._hold_in_sec:
-                        self._speak_phase(self.settings.get("voice_exhale_text", "Breathe out"))
-                else:
-                    self._breathing_var.set("Hold... 🛑")
+                if elapsed < delay:
+                    self._breathing_var.set("Prepare to breathe... 🧘")
                     self._breathing_label.config(fg=TH["fg_dim"])
-                    if cycle == self._inhale_sec + self._hold_in_sec + self._exhale_sec:
-                        self._speak_phase(self.settings.get("voice_hold_out_text", "Hold"))
+                else:
+                    cycle_time = elapsed - delay
+                    T = max(1, self._inhale_sec + self._hold_in_sec + self._exhale_sec + self._hold_out_sec)
+                    cycle = cycle_time % T
+
+                    if cycle < self._inhale_sec:
+                        self._breathing_var.set("Breathe In... 🌬️")
+                        self._breathing_label.config(fg=TH["success"])
+                        if cycle == 0:
+                            self._speak_phase(self.settings.get("voice_inhale_text", "Breathe in"))
+                    elif cycle < self._inhale_sec + self._hold_in_sec:
+                        self._breathing_var.set("Hold... 🛑")
+                        self._breathing_label.config(fg=TH["warning"])
+                        if cycle == self._inhale_sec:
+                            self._speak_phase(self.settings.get("voice_hold_in_text", "Hold"))
+                    elif cycle < self._inhale_sec + self._hold_in_sec + self._exhale_sec:
+                        self._breathing_var.set("Breathe Out... 💨")
+                        self._breathing_label.config(fg=TH["accent"])
+                        if cycle == self._inhale_sec + self._hold_in_sec:
+                            self._speak_phase(self.settings.get("voice_exhale_text", "Breathe out"))
+                    else:
+                        self._breathing_var.set("Hold... 🛑")
+                        self._breathing_label.config(fg=TH["fg_dim"])
+                        if cycle == self._inhale_sec + self._hold_in_sec + self._exhale_sec:
+                            self._speak_phase(self.settings.get("voice_hold_out_text", "Hold"))
 
                 self._remaining -= 1
                 self.window.after(1000, self._tick_countdown)
@@ -251,7 +277,8 @@ class BreakOverlay:
             voice_name = self.settings.get("voice_name", "Default")
             volume = int(self.settings.get("voice_volume", 80))
             rate = int(self.settings.get("voice_rate", 0))
-            speak_sapi_async(text, voice_name, volume, rate)
+            pitch = int(self.settings.get("voice_pitch", 0))
+            speak_sapi_async(text, voice_name, volume, rate, pitch)
 
     def _start_focus_keeper(self):
         self._keep_on_top()
@@ -297,6 +324,13 @@ class BreakOverlay:
     def _cleanup(self):
         """Clean up and restore system state."""
         try:
+            # Auto-resume media that was playing right before the break
+            try:
+                get_media_controller().resume_paused_media()
+                logger.info("Executed resume for paused media sessions on break end.")
+            except Exception as e:
+                logger.error(f"Error resuming media on break end: {e}")
+
             if PYGAME_AVAILABLE:
                 try:
                     pygame.mixer.music.stop()

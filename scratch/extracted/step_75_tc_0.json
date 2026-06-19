@@ -1,9 +1,0 @@
-{
-  "CaseInsensitive": "false",
-  "IsRegex": "false",
-  "MatchPerLine": "true",
-  "Query": "\"def run(self):\"",
-  "SearchPath": "\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\\\\HealthApp\\\\health_app.py\"",
-  "toolAction": "\"Locating run method\"",
-  "toolSummary": "\"Locate run method\""
-}

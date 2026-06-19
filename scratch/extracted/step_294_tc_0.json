@@ -1,7 +1,0 @@
-{
-  "CommandLine": "\"python -c \\\"print(len(open('HealthApp/health_app.py', encoding='utf-8').readlines()))\\\"\"",
-  "Cwd": "\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\"",
-  "WaitMsBeforeAsync": "2000",
-  "toolAction": "\"Counting file lines\"",
-  "toolSummary": "\"Counting lines in health_app.py\""
-}

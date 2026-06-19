@@ -32,11 +32,11 @@ if not getattr(deezload.base.extract_video_id, "__patched__", False):
     _patched.__patched__ = True
     deezload.base.extract_video_id = _patched
 
-from MovieSongDownloader.providers.base import BaseDownloadProvider  # noqa: E402
-from MovieSongDownloader.core.models import Track  # noqa: E402
-from MovieSongDownloader.core.rate_limiter import rate_limiter  # noqa: E402
+from movie_song_downloader.providers.base import BaseDownloadProvider  # noqa: E402
+from movie_song_downloader.core.models import Track  # noqa: E402
+from movie_song_downloader.core.rate_limiter import rate_limiter  # noqa: E402
 
-logger = logging.getLogger("MovieSongDownloader.DeezspotProvider")
+logger = logging.getLogger("movie_song_downloader.DeezspotProvider")
 
 
 class DeezspotProvider(BaseDownloadProvider):

@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from MovieSongDownloader.providers.lyrics_provider import LyricsProvider
+from movie_song_downloader.providers.lyrics_provider import LyricsProvider
 
 
 def test_lyrics_sync_detection():
@@ -25,7 +25,7 @@ async def test_waterfall_priority_fallback(monkeypatch):
     provider = LyricsProvider()
 
     # Mock settings manager keys
-    from MovieSongDownloader.core.settings_manager import settings_manager
+    from movie_song_downloader.core.settings_manager import settings_manager
 
     async def mock_get(key):
         return '["lrclib", "genius"]'  # Custom waterfall subset

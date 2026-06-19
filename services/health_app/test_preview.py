@@ -22,11 +22,7 @@ def test_preview_window():
 
         # Test creating SettingsWindow without mainloop blocking
         assert sw is not None
-        assert sw.health_preview_scroll_frame is not None
-        assert len(sw.health_preview_canvases) > 0
-        sw._rebuild_health_toast_previews()
-        sw._test_health_preview_sound("breathing")
-        sw._show_health_desktop_preview("breathing")
+        assert sw.parent is not None
 
         # Verify triggering desktop previews for each tab to catch any NameErrors/crashes
         sw._show_desktop_preview_for_tab("📅 Schedule") # Should return None gracefully

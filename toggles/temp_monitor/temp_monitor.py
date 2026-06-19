@@ -39,8 +39,8 @@ LOG_FILE = os.path.join(LOGS_DIR, "temp_monitor.log")
 root_dir = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 if root_dir not in sys.path:
     sys.path.append(root_dir)
-from toast_utils import BaseToast  # noqa: E402
-import system_utils  # noqa: E402
+from services.aerohub_core.toast_utils import BaseToast  # noqa: E402
+import services.aerohub_core.system_utils as system_utils  # noqa: E402
 
 os.makedirs(LOGS_DIR, exist_ok=True)
 os.makedirs(SCRIPT_DIR, exist_ok=True)
@@ -406,6 +406,9 @@ class TempMonitorApp:
             "toast_auto_dismiss": True,
             "toast_click_action": "dismiss",
             "toast_progress_bar": False,
+            "toast_enable_sound": True,
+            "toast_sound_effect": "mac_connect",
+            "toast_volume": 80,
         }
         if os.path.exists(self.settings_path):
             try:

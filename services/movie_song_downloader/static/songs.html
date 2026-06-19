@@ -1,0 +1,125 @@
+<!-- MovieSongDownloader/static/songs.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soundtrack Album | Movie Song Downloader</title>
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation Container -->
+        <div id="sidebar-container"></div>
+        
+        <!-- Main Panel Content -->
+        <main class="main-content">
+            <!-- Back Header -->
+            <button id="back-btn" class="btn btn-ghost" style="padding: 0; min-height: auto; align-self: flex-start;">
+                <i class="fa-solid fa-arrow-left"></i> Back to Search
+            </button>
+            
+            <!-- Album Detail Card -->
+            <div id="album-header-card" class="album-header-card" style="display: none;">
+                <div class="album-cover-container">
+                    <img id="album-cover" src="https://via.placeholder.com/120?text=No+Cover" class="album-cover" alt="Album Cover">
+                </div>
+                <div class="album-info-section">
+                    <span class="album-badge">SOUNDTRACK ALBUM</span>
+                    <h1 id="album-title" class="album-title">Album Name</h1>
+                    <p id="movie-info" class="page-description">Movie: Movie Title (Year)</p>
+                    <p id="album-artists" style="font-size: 0.85rem; color: var(--color-text-muted);">Artists: Artists Name</p>
+                </div>
+            </div>
+            
+            <!-- Sub-controls -->
+            <div id="sub-controls-row" class="header-row" style="display: none; margin-top: 16px;">
+                <div class="toggle-row">
+                    <input type="checkbox" id="select-all-checkbox" style="cursor: pointer; width: 18px; height: 18px; accent-color: var(--color-accent);" checked>
+                    <label for="select-all-checkbox" style="font-weight: 600; font-size: 0.95rem; cursor: pointer;">Select All Tracks</label>
+                </div>
+                <button id="download-selected-btn" class="btn btn-primary">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> Download Selected
+                </button>
+            </div>
+            
+            <div class="divider"></div>
+            
+            <!-- Tracks Listing area -->
+            <div class="tracks-section" style="width: 100%;">
+                <!-- Loader -->
+                <div id="tracks-loader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; gap: 12px;">
+                    <div class="spinner spinner-lg"></div>
+                    <span style="color: var(--color-text-muted); font-size: 0.9rem;">Loading album tracks and syncing database records...</span>
+                </div>
+                
+                <!-- Empty state -->
+                <div id="empty-tracks-state" class="empty-state" style="display: none;">
+                    <i class="fa-solid fa-music"></i>
+                    <p>No tracks found for this soundtrack album.</p>
+                </div>
+                
+                <!-- Tracks list container -->
+                <div id="tracks-list" class="list-container" style="display: none;"></div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Hidden Audio Preview Element -->
+    <audio id="audio-preview-element" style="display: none;"></audio>
+    
+    <!-- Warning Modal: Output Directory Not Set -->
+    <div id="missing-dir-dialog" class="modal-overlay">
+        <div class="modal-content">
+            <h2 class="modal-title">Output Directory Not Set</h2>
+            <p class="modal-description" style="margin-top: 8px;">
+                No output directory has been configured. Click below to browse and select a path on your computer.
+            </p>
+            <div class="modal-footer" style="margin-top: 24px;">
+                <button id="default-downloads-btn" class="btn btn-secondary">Default to Downloads</button>
+                <button id="trigger-picker-btn" class="btn btn-primary">Select Folder</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal: Local Folder Explorer -->
+    <div id="dir-explorer-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 550px;">
+            <h2 class="modal-title">Local Directory Explorer</h2>
+            <p class="modal-description">
+                Browse and select an absolute path on your host machine to store downloads.
+            </p>
+            <div class="modal-body" style="margin-top: 12px;">
+                <!-- Current path -->
+                <div style="display: flex; gap: 8px; font-size: 0.85rem; padding: 4px 0;">
+                    <span style="font-weight: 700; color: var(--color-text-muted);">Current Path:</span>
+                    <span id="current-explorer-path" style="color: var(--color-text-primary); font-family: monospace; word-break: break-all;">/</span>
+                </div>
+                
+                <!-- Folder browsing list -->
+                <div class="explorer-list" id="explorer-folder-list">
+                    <!-- Parent directory up link -->
+                    <button class="explorer-item" id="parent-dir-btn">
+                        <i class="fa-solid fa-folder-open"></i> .. Parent Directory
+                    </button>
+                    <!-- Folders are dynamically inserted here -->
+                    <div id="explorer-items-container" style="display: flex; flex-direction: column;"></div>
+                </div>
+                <div id="explorer-error-msg" style="color: var(--color-error); font-size: 0.8rem; display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancel-explorer-btn" class="btn btn-secondary">Cancel</button>
+                <button id="select-folder-btn" class="btn btn-primary">Select Folder</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Shared JS -->
+    <script src="/js/common.js"></script>
+    <!-- Custom Page JS -->
+    <script src="/js/songs.js"></script>
+</body>
+</html>

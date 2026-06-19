@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import patch
-from MovieSongDownloader.providers.musicbrainz_provider import MusicBrainzProvider
-from MovieSongDownloader.core.models import Album, Track
-from MovieSongDownloader.core.database import db
+from movie_song_downloader.providers.musicbrainz_provider import MusicBrainzProvider
+from movie_song_downloader.core.models import Album, Track
+from movie_song_downloader.core.database import db
 
 
 @pytest.mark.asyncio

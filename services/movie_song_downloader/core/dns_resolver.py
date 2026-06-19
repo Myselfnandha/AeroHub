@@ -6,7 +6,7 @@ import urllib.request
 import httpx
 from typing import Dict, Optional
 
-logger = logging.getLogger("MovieSongDownloader.DnsResolver")
+logger = logging.getLogger("movie_song_downloader.DnsResolver")
 
 _original_getaddrinfo = socket.getaddrinfo
 _dns_overrides: Dict[str, str] = {}

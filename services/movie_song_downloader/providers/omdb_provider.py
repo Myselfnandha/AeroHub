@@ -4,13 +4,13 @@ import logging
 import hashlib
 from typing import List, Optional
 
-from MovieSongDownloader.core.models import Movie
-from MovieSongDownloader.core.settings_manager import settings_manager
-from MovieSongDownloader.core.rate_limiter import rate_limiter, providers_logger
-from MovieSongDownloader.core.cache_manager import api_cache
-from MovieSongDownloader.config import OMDB_BASE_URL
+from movie_song_downloader.core.models import Movie
+from movie_song_downloader.core.settings_manager import settings_manager
+from movie_song_downloader.core.rate_limiter import rate_limiter, providers_logger
+from movie_song_downloader.core.cache_manager import api_cache
+from movie_song_downloader.config import OMDB_BASE_URL
 
-logger = logging.getLogger("MovieSongDownloader.OMDbProvider")
+logger = logging.getLogger("movie_song_downloader.OMDbProvider")
 
 
 class OMDbProvider:

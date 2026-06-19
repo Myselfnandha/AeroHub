@@ -1,0 +1,66 @@
+<!-- MovieSongDownloader/static/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Home | Movie Song Downloader</title>
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation Container -->
+        <div id="sidebar-container"></div>
+        
+        <!-- Main Panel Content -->
+        <main class="main-content">
+            <div class="header-row">
+                <div class="header-title-section">
+                    <h1 class="page-title">Dashboard Home</h1>
+                    <p class="page-description">Recent movie releases from Wikipedia. Click browse to explore soundtracks.</p>
+                </div>
+                
+                <!-- Background Update Indicator Panel -->
+                <div class="header-actions">
+                    <div id="update-status-panel" class="status-panel" style="display: none;">
+                        <div class="spinner"></div>
+                        <span id="update-status-text">Checking for updates...</span>
+                    </div>
+                    <button id="refresh-dashboard-btn" class="btn btn-success" style="display: none;">
+                        <i class="fa-solid fa-arrows-rotate"></i> Refresh Dashboard
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Tamil Releases Section -->
+            <div class="releases-section">
+                <div class="section-title-wrapper">
+                    <h2 class="section-title">Recent Tamil Releases</h2>
+                    <p class="section-subtitle">Tamil cinema releases from Wikipedia. Details via OMDb.</p>
+                </div>
+                
+                <!-- Releases List Grid -->
+                <div id="releases-loader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; gap: 12px;">
+                    <div class="spinner spinner-lg"></div>
+                    <span style="color: var(--color-text-muted); font-size: 0.9rem;">Loading...</span>
+                </div>
+                
+                <div id="empty-releases-state" class="empty-state" style="display: none;">
+                    <i class="fa-solid fa-clapperboard"></i>
+                    <p>No recent releases found in local database cache.</p>
+                </div>
+                
+                <div id="releases-grid" class="grid-layout" style="display: none;"></div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Shared JS -->
+    <script src="/js/common.js"></script>
+    <!-- Custom Page JS -->
+    <script src="/js/home.js"></script>
+</body>
+</html>

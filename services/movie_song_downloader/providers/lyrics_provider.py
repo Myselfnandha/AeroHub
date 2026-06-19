@@ -5,11 +5,11 @@ import time
 import json
 from typing import Tuple, Optional
 import syncedlyrics
-from MovieSongDownloader.providers.base import BaseLyricsProvider
-from MovieSongDownloader.core.settings_manager import settings_manager
-from MovieSongDownloader.core.rate_limiter import rate_limiter, providers_logger
+from movie_song_downloader.providers.base import BaseLyricsProvider
+from movie_song_downloader.core.settings_manager import settings_manager
+from movie_song_downloader.core.rate_limiter import rate_limiter, providers_logger
 
-logger = logging.getLogger("MovieSongDownloader.LyricsProvider")
+logger = logging.getLogger("movie_song_downloader.LyricsProvider")
 
 
 class LyricsProvider(BaseLyricsProvider):

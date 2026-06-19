@@ -5,17 +5,17 @@ import pytest
 # Ensure Tcl/Tk can find its init.tcl in some Python installs where the
 # embedded tcl folder isn't discovered automatically. Use LOCALAPPDATA
 # Python install path as a sensible default on Windows.
-if "TCL_LIBRARY" not in os.environ:
-    local_tcl = os.path.join(
+if "TCL_LIBRARY" not in os.environ or "TK_LIBRARY" not in os.environ:
+    base_tcl_dir = os.path.join(
         os.environ.get("LOCALAPPDATA", ""),
         "Programs",
         "Python",
         "Python312",
-        "tcl",
-        "tcl8.6",
+        "tcl"
     )
-    if os.path.isdir(local_tcl):
-        os.environ["TCL_LIBRARY"] = local_tcl
+    if os.path.isdir(base_tcl_dir):
+        os.environ["TCL_LIBRARY"] = os.path.join(base_tcl_dir, "tcl8.6")
+        os.environ["TK_LIBRARY"] = os.path.join(base_tcl_dir, "tk8.6")
 
 import tkinter as tk
 
@@ -24,7 +24,7 @@ PARENT_DIR = os.path.dirname(SCRIPT_DIR)
 if PARENT_DIR not in sys.path:
     sys.path.insert(0, PARENT_DIR)
 
-from toast_utils import BaseToast  # noqa: E402
+from services.aerohub_core.toast_utils import BaseToast  # noqa: E402
 
 
 def test():

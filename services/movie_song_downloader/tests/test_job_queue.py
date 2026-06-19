@@ -1,6 +1,6 @@
 import pytest
-from MovieSongDownloader.core.database import db
-from MovieSongDownloader.core.job_queue import job_queue
+from movie_song_downloader.core.database import db
+from movie_song_downloader.core.job_queue import job_queue
 
 
 @pytest.mark.asyncio

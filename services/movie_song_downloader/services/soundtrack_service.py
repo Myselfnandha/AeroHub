@@ -1,11 +1,11 @@
 import logging
 from typing import List, Optional
-from MovieSongDownloader.providers.jiosaavn_provider import JioSaavnProvider
-from MovieSongDownloader.core.models import Album, Track
-from MovieSongDownloader.providers.metadata_normalizer import normalize_title
-from MovieSongDownloader.core.database import db
+from movie_song_downloader.providers.jiosaavn_provider import JioSaavnProvider
+from movie_song_downloader.core.models import Album, Track
+from movie_song_downloader.providers.metadata_normalizer import normalize_title
+from movie_song_downloader.core.database import db
 
-logger = logging.getLogger("MovieSongDownloader.SoundtrackService")
+logger = logging.getLogger("movie_song_downloader.SoundtrackService")
 
 
 class SoundtrackService:
@@ -133,7 +133,7 @@ class SoundtrackService:
 
         # Route to SpotifyProvider if source is Spotify
         if source == "spotify" or "spotify.com" in album_id or len(album_id) == 22:
-            from MovieSongDownloader.providers.spotify_provider import SpotifyProvider
+            from movie_song_downloader.providers.spotify_provider import SpotifyProvider
 
             spotify_prov = SpotifyProvider()
             url_or_id = spotify_url or album_id

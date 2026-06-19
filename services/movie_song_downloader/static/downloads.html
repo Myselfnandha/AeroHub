@@ -1,0 +1,58 @@
+<!-- MovieSongDownloader/static/downloads.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Downloads Manager | Movie Song Downloader</title>
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation Container -->
+        <div id="sidebar-container"></div>
+        
+        <!-- Main Panel Content -->
+        <main class="main-content">
+            <div class="header-row">
+                <div class="header-title-section">
+                    <h1 class="page-title">Downloads Manager</h1>
+                    <p class="page-description">Track active downloads, monitor queue progress, and recover failed jobs.</p>
+                </div>
+                <button id="refresh-queue-btn" class="btn btn-primary">
+                    <i class="fa-solid fa-arrows-rotate"></i> Refresh Queue
+                </button>
+            </div>
+            
+            <div class="divider"></div>
+            
+            <!-- Downloads Section -->
+            <div class="downloads-section" style="width: 100%;">
+                <!-- Loader -->
+                <div id="downloads-loader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; gap: 12px;">
+                    <div class="spinner spinner-lg"></div>
+                    <span style="color: var(--color-text-muted); font-size: 0.9rem;">Loading download queue...</span>
+                </div>
+                
+                <!-- Empty state -->
+                <div id="empty-downloads-state" class="empty-state" style="display: none;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i>
+                    <h3>No downloads yet</h3>
+                    <p>Select songs and queue downloads to see progress here.</p>
+                </div>
+                
+                <!-- Job cards container -->
+                <div id="downloads-list" class="list-container" style="display: none;"></div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Shared JS -->
+    <script src="/js/common.js"></script>
+    <!-- Custom Page JS -->
+    <script src="/js/downloads.js"></script>
+</body>
+</html>

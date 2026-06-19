@@ -4,7 +4,7 @@ param(
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $env:FLET_WEB_PORT = "$port"
-Write-Host "Starting MovieSongDownloader in DEVELOPMENT mode with hot reload"
-Start-Process -NoNewWindow -FilePath python -ArgumentList "MovieSongDownloader/main.py"
+Write-Host "Starting movie_song_downloader in DEVELOPMENT mode with hot reload"
+Start-Process -NoNewWindow -FilePath python -ArgumentList "movie_song_downloader/main.py"
 Start-Sleep -Seconds 4
 Start-Process "http://127.0.0.1:$port"

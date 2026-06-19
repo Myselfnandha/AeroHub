@@ -1,13 +1,13 @@
 import logging
 from datetime import datetime
 from typing import List
-from MovieSongDownloader.core.database import db
-from MovieSongDownloader.core.models import WatchlistItem, Movie, Album, Track
-from MovieSongDownloader.providers.wikipedia_provider import WikipediaProvider
-from MovieSongDownloader.services.soundtrack_service import SoundtrackService
-from MovieSongDownloader.core.job_queue import job_queue
+from movie_song_downloader.core.database import db
+from movie_song_downloader.core.models import WatchlistItem, Movie, Album, Track
+from movie_song_downloader.providers.wikipedia_provider import WikipediaProvider
+from movie_song_downloader.services.soundtrack_service import SoundtrackService
+from movie_song_downloader.core.job_queue import job_queue
 
-logger = logging.getLogger("MovieSongDownloader.WatchlistService")
+logger = logging.getLogger("movie_song_downloader.WatchlistService")
 
 
 class WatchlistService:

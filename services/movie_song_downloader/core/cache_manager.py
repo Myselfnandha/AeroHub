@@ -5,10 +5,10 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 import httpx
-from MovieSongDownloader.config import POSTERS_CACHE_DIR, COVERS_CACHE_DIR
-from MovieSongDownloader.core.database import db
+from movie_song_downloader.config import POSTERS_CACHE_DIR, COVERS_CACHE_DIR
+from movie_song_downloader.core.database import db
 
-logger = logging.getLogger("MovieSongDownloader.CacheManager")
+logger = logging.getLogger("movie_song_downloader.CacheManager")
 
 
 class DownloadCache:
@@ -73,7 +73,7 @@ class ImageCache:
         if local_path.exists():
             return str(local_path)
         headers = {
-            "User-Agent": "MovieSongDownloader/2.0 (contact: nandha.dev@gmail.com)"
+            "User-Agent": "movie_song_downloader/2.0 (contact: nandha.dev@gmail.com)"
         }
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:

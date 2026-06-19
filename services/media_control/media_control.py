@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """
 Media Control — Taskbar Tray Controls only.
 Uses Windows SDK (winsdk) for real-time media session status, and Win32 APIs
@@ -43,6 +44,10 @@ def get_friendly_app_name(app_id: str) -> str:
         return "Unknown"
 
     app_id = str(app_id)
+    app_id_lower = app_id.lower()
+    if "308046b0af4a39cb" in app_id_lower or "firefox" in app_id_lower:
+        return "Firefox"
+
     name = app_id
 
     # 1. Handle UWP Packaged Apps (e.g. SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify)
@@ -116,11 +121,11 @@ ROOT_DIR = os.path.dirname(SCRIPT_DIR)
 LOG_PATH = os.path.join(ROOT_DIR, "media_control.log")
 os.makedirs(SCRIPT_DIR, exist_ok=True)
 
-# Ensure workspace root is in sys.path to import system_utils
+# Ensure workspace root is in sys.path to import services.aerohub_core.system_utils as system_utils
 WORKSPACE_ROOT = os.path.dirname(ROOT_DIR)
 if WORKSPACE_ROOT not in sys.path:
     sys.path.insert(0, WORKSPACE_ROOT)
-import system_utils
+import services.aerohub_core.system_utils as system_utils
 
 # Set unique AppUserModelID so tray icons appear separately
 try:
@@ -317,7 +322,7 @@ class MediaControlApp:
                 "id": 1,
                 "type": "prev",
                 "tip": "Previous Track",
-                "cmd": lambda: send_media_key(VK_MEDIA_PREV),
+                "cmd": self.handle_prev,
             },
             {
                 "id": 2,
@@ -329,7 +334,7 @@ class MediaControlApp:
                 "id": 3,
                 "type": "next",
                 "tip": "Next Track",
-                "cmd": lambda: send_media_key(VK_MEDIA_NEXT),
+                "cmd": self.handle_next,
             },
         ]
 
@@ -540,6 +545,22 @@ class MediaControlApp:
         win32gui.PostMessage(self.hwnd, win32con.WM_NULL, 0, 0)
         win32gui.DestroyMenu(hmenu)
 
+    def get_best_active_session(self):
+        """Returns the dictionary representing the best session from self.active_sessions."""
+        sessions = getattr(self, "active_sessions", [])
+        if not sessions:
+            return None
+        # Try to find one that is playing (status == 4)
+        for s in sessions:
+            if s.get("status") == 4:
+                return s
+        # Otherwise, try to find one that is paused (status == 5)
+        for s in sessions:
+            if s.get("status") == 5:
+                return s
+        # Fall back to first session
+        return sessions[0]
+
     def handle_play_pause(self):
         playing_sessions = [
             s for s in getattr(self, "active_sessions", []) if s["status"] == 4
@@ -554,10 +575,54 @@ class MediaControlApp:
                 else:
                     self.send_session_command(app_id, "pause")
         else:
-            logger.info(
-                "Single session playing/paused or all paused. Sending global play/pause."
-            )
-            send_media_key(VK_MEDIA_PLAY_PAUSE)
+            best_session = self.get_best_active_session()
+            if best_session:
+                app_id = best_session["app_id"]
+                is_pycaw = best_session.get("is_pycaw", False)
+                status = best_session["status"]
+                
+                logger.info(f"Targeting active session for play/pause: {app_id} (pycaw: {is_pycaw}, status: {status})")
+                if status == 4:  # Playing -> Pause it
+                    if is_pycaw:
+                        self.send_pycaw_command(app_id, "pause")
+                    else:
+                        self.send_session_command(app_id, "pause")
+                else:  # Paused/Stopped -> Play it
+                    if is_pycaw:
+                        self.send_pycaw_command(app_id, "play")
+                    else:
+                        self.send_session_command(app_id, "play")
+            else:
+                logger.info("No active session. Sending global play/pause key.")
+                send_media_key(VK_MEDIA_PLAY_PAUSE)
+
+    def handle_next(self):
+        best_session = self.get_best_active_session()
+        if best_session:
+            app_id = best_session.get("app_id")
+            is_pycaw = best_session.get("is_pycaw", False)
+            logger.info(f"Targeting active session for next: {app_id} (pycaw: {is_pycaw})")
+            if is_pycaw:
+                self.send_pycaw_command(app_id, "next")
+            else:
+                self.send_session_command(app_id, "next")
+        else:
+            logger.info("No active session. Sending global next key.")
+            send_media_key(VK_MEDIA_NEXT)
+
+    def handle_prev(self):
+        best_session = self.get_best_active_session()
+        if best_session:
+            app_id = best_session.get("app_id")
+            is_pycaw = best_session.get("is_pycaw", False)
+            logger.info(f"Targeting active session for prev: {app_id} (pycaw: {is_pycaw})")
+            if is_pycaw:
+                self.send_pycaw_command(app_id, "prev")
+            else:
+                self.send_session_command(app_id, "prev")
+        else:
+            logger.info("No active session. Sending global prev key.")
+            send_media_key(VK_MEDIA_PREV)
 
     def _trigger_click_effect(self, ctrl_id):
         if self.clicking_states.get(ctrl_id):
@@ -691,45 +756,8 @@ class MediaControlApp:
                 await asyncio.sleep(5)
 
         while True:
-            session = None
-            info = None
             try:
-                session = manager.get_current_session()
-                if session:
-                    info = session.get_playback_info()
-                    status = info.playback_status if info else None
-
-                    title = ""
-                    artist = ""
-                    try:
-                        props = await session.try_get_media_properties_async()
-                        if props:
-                            title = props.title or ""
-                            artist = props.artist or ""
-                    except Exception as pe:
-                        logger.debug(f"Failed to get media properties: {pe}")
-
-                    if (
-                        status != self.current_status
-                        or title != self.current_title
-                        or artist != self.current_artist
-                    ):
-                        self.current_status = status
-                        self.current_title = title
-                        self.current_artist = artist
-                        self.update_media_state(status, title, artist)
-                else:
-                    if (
-                        self.current_status is not None
-                        or self.current_title != ""
-                        or self.current_artist != ""
-                    ):
-                        self.current_status = None
-                        self.current_title = ""
-                        self.current_artist = ""
-                        self.update_media_state(None, "", "")
-
-                # Multi-session monitoring — always count active sessions
+                # Multi-session monitoring — always scan active sessions
                 active_sessions_list = []
                 smtc_sessions = manager.get_sessions()
                 for s in smtc_sessions:
@@ -761,6 +789,7 @@ class MediaControlApp:
                                         "status": s_status,
                                         "title": s_title,
                                         "artist": s_artist,
+                                        "is_pycaw": False,
                                     }
                                 )
                     except Exception as se:
@@ -845,15 +874,69 @@ class MediaControlApp:
                     logger.info(f"Active sessions count changed to: {new_count}")
                     self.prev_active_count = new_count
 
+                # Select the best active session to display in tray tooltip & play/pause button state
+                best_s = None
+                # 1. Look for playing SMTC/Pycaw session
+                for s in active_sessions_list:
+                    if s["status"] == 4:
+                        best_s = s
+                        break
+                # 2. If none playing, look for paused SMTC/Pycaw session
+                if not best_s:
+                    for s in active_sessions_list:
+                        if s["status"] == 5:
+                            best_s = s
+                            break
+                # 3. Fallback to manager's current session if no active list session matches
+                if not best_s:
+                    current_s = manager.get_current_session()
+                    if current_s:
+                        try:
+                            c_app_id = current_s.source_app_user_model_id
+                            c_info = current_s.get_playback_info()
+                            c_status = c_info.playback_status if c_info else 0
+                            c_props = await current_s.try_get_media_properties_async()
+                            c_title = c_props.title if c_props else ""
+                            c_artist = c_props.artist if c_props else ""
+                            best_s = {
+                                "app_id": c_app_id or "UnknownApp",
+                                "status": c_status,
+                                "title": c_title,
+                                "artist": c_artist,
+                                "is_pycaw": False,
+                            }
+                        except Exception:
+                            pass
+
+                if best_s:
+                    status = best_s["status"]
+                    title = best_s["title"]
+                    artist = best_s["artist"]
+                    
+                    if (
+                        status != self.current_status
+                        or title != self.current_title
+                        or artist != self.current_artist
+                    ):
+                        self.current_status = status
+                        self.current_title = title
+                        self.current_artist = artist
+                        self.update_media_state(status, title, artist)
+                else:
+                    if (
+                        self.current_status is not None
+                        or self.current_title != ""
+                        or self.current_artist != ""
+                    ):
+                        self.current_status = None
+                        self.current_title = ""
+                        self.current_artist = ""
+                        self.update_media_state(None, "", "")
+
             except Exception as e:
                 logger.error(f"Error checking Windows Media session: {e}")
             finally:
-                if session is not None:
-                    del session
-                if info is not None:
-                    del info
                 import gc
-
                 gc.collect()
 
             try:

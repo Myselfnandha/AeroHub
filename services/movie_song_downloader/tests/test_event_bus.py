@@ -1,5 +1,5 @@
 import pytest
-from MovieSongDownloader.core.event_bus import EventBus, Event
+from movie_song_downloader.core.event_bus import EventBus, Event
 
 
 @pytest.mark.asyncio

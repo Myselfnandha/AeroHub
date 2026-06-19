@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """
 Clipboard Manager — Background clipboard history tracker with desktop GUI.
 Tracks text and file-path clipboard entries, stores in SQLite, provides
@@ -41,11 +42,11 @@ DB_PATH = os.path.join(SCRIPT_DIR, "clipboard_history.db")
 EXPORT_DIR = os.path.join(SCRIPT_DIR, "exports")
 LOG_PATH = os.path.join(ROOT_DIR, "clipboard_manager.log")
 
-# Ensure root directory is in sys.path to import system_utils
+# Ensure root directory is in sys.path to import services.aerohub_core.system_utils as system_utils
 WORKSPACE_ROOT = os.path.dirname(os.path.dirname(ROOT_DIR))
 if WORKSPACE_ROOT not in sys.path:
     sys.path.insert(0, WORKSPACE_ROOT)
-import system_utils
+import services.aerohub_core.system_utils as system_utils
 
 os.makedirs(EXPORT_DIR, exist_ok=True)
 

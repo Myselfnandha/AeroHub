@@ -1,12 +1,12 @@
 import os
 import logging
 from typing import Optional
-from MovieSongDownloader.providers.base import BaseTaggingProvider
+from movie_song_downloader.providers.base import BaseTaggingProvider
 from mutagen.mp3 import MP3
 from mutagen.id3 import ID3, APIC, USLT, TIT2, TPE1, TALB, TYER, TRCK, ID3NoHeaderError
 from mutagen.flac import FLAC, Picture
 
-logger = logging.getLogger("MovieSongDownloader.TaggingProvider")
+logger = logging.getLogger("movie_song_downloader.TaggingProvider")
 
 
 class TaggingProvider(BaseTaggingProvider):

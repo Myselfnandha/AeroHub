@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Optional, Callable
-from MovieSongDownloader.core.models import Movie, Album, Track
+from movie_song_downloader.core.models import Movie, Album, Track
 
 
 class BaseMovieProvider(ABC):

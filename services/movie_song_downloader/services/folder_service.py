@@ -5,10 +5,10 @@ import logging
 from datetime import datetime
 from typing import Tuple
 from pathlib import Path
-from MovieSongDownloader.core.models import Movie, Album, Track
-from MovieSongDownloader.core.settings_manager import settings_manager
+from movie_song_downloader.core.models import Movie, Album, Track
+from movie_song_downloader.core.settings_manager import settings_manager
 
-logger = logging.getLogger("MovieSongDownloader.FolderService")
+logger = logging.getLogger("movie_song_downloader.FolderService")
 
 
 class FolderService:

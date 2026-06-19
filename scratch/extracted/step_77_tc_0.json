@@ -1,9 +1,0 @@
-{
-  "CaseInsensitive": "false",
-  "IsRegex": "false",
-  "MatchPerLine": "true",
-  "Query": "\"generate_breathing_sound()\"",
-  "SearchPath": "\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\\\\HealthApp\\\\health_app.py\"",
-  "toolAction": "\"Searching for generate_breathing_sound calls\"",
-  "toolSummary": "\"Search for generate_breathing_sound calls\""
-}

@@ -1,8 +1,8 @@
-# MovieSongDownloader/ui/downloads.py
+# movie_song_downloader/ui/downloads.py
 
 import reflex as rx
-from MovieSongDownloader.ui.state import AppState
-from MovieSongDownloader.ui import style
+from movie_song_downloader.ui.state import AppState
+from movie_song_downloader.ui import style
 
 
 def status_badge_color(status: rx.Var[str]) -> rx.Var[str]:

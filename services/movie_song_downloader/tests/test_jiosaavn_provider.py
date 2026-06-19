@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch
-from MovieSongDownloader.core.database import db
-from MovieSongDownloader.providers.jiosaavn_provider import JioSaavnProvider
+from movie_song_downloader.core.database import db
+from movie_song_downloader.providers.jiosaavn_provider import JioSaavnProvider
 
 
 @pytest.mark.asyncio

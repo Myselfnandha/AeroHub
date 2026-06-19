@@ -35,7 +35,7 @@ class MediaController:
         self._loop = None
         self._thread = None
         self._ready = threading.Event()
-        self._paused_app_ids = []
+        self._paused_sessions = []
         self._lock = threading.Lock()
         self._start_thread()
 
@@ -68,39 +68,39 @@ class MediaController:
             return None
 
     def pause_active_media(self):
-        """Pause all currently PLAYING media sessions. Records app_ids to resume later."""
+        """Pause all currently PLAYING media sessions. Records (app_id, title) to resume later."""
         with self._lock:
-            self._paused_app_ids.clear()
+            self._paused_sessions.clear()
 
         if not WINSDK_AVAILABLE:
             _send_media_key(VK_MEDIA_PLAY_PAUSE)
             return
 
-        paused_ids = self._run_async(self._do_pause())
-        if paused_ids is None:
+        paused = self._run_async(self._do_pause())
+        if paused is None:
             # Async failed — fall back to global media key
             _send_media_key(VK_MEDIA_PLAY_PAUSE)
             return
 
         with self._lock:
-            self._paused_app_ids = paused_ids
+            self._paused_sessions = paused
 
-        logger.info(f"Paused {len(paused_ids)} active media sessions via winsdk.")
+        logger.info(f"Paused {len(paused)} active media sessions via winsdk.")
 
     def resume_paused_media(self):
         """Resume only the media sessions that were paused before the break."""
         with self._lock:
-            ids_to_resume = list(self._paused_app_ids)
-            self._paused_app_ids.clear()
+            sessions_to_resume = list(self._paused_sessions)
+            self._paused_sessions.clear()
 
         if not WINSDK_AVAILABLE:
             _send_media_key(VK_MEDIA_PLAY_PAUSE)
             return
 
-        if not ids_to_resume:
+        if not sessions_to_resume:
             return
 
-        count = self._run_async(self._do_resume(ids_to_resume))
+        count = self._run_async(self._do_resume(sessions_to_resume))
         if count is None:
             _send_media_key(VK_MEDIA_PLAY_PAUSE)
             return
@@ -110,11 +110,10 @@ class MediaController:
     async def _do_pause(self):
         """Fetch fresh sessions and pause all that are Playing (status==4).
 
-        Returns list of app_ids that were successfully paused.
-        Deduplicates by app_id so Chrome with 2 tabs only gets paused once.
+        Returns list of (app_id, title) tuples that were successfully paused.
         """
-        paused_ids = []
-        seen_app_ids = set()
+        paused = []
+        seen_sessions = set()
 
         try:
             manager = await SessionManager.request_async()
@@ -123,11 +122,19 @@ class MediaController:
             for session in sessions:
                 try:
                     app_id = session.source_app_user_model_id or ""
+                    
+                    title = ""
+                    try:
+                        props = await session.try_get_media_properties_async()
+                        title = props.title or ""
+                    except Exception:
+                        pass
 
-                    # Deduplicate: only process first session per app
-                    if app_id in seen_app_ids:
+                    # Unique session key
+                    s_key = (app_id, title)
+                    if s_key in seen_sessions:
                         continue
-                    seen_app_ids.add(app_id)
+                    seen_sessions.add(s_key)
 
                     info = session.get_playback_info()
                     if not info:
@@ -138,11 +145,8 @@ class MediaController:
                         continue
 
                     result = await session.try_pause_async()
-                    if result:
-                        paused_ids.append(app_id)
-                    else:
-                        # try_pause_async returned False — session may not support it
-                        paused_ids.append(app_id)
+                    # Keep track of it as paused
+                    paused.append((app_id, title))
 
                 except Exception as e:
                     logger.debug(f"Error pausing session ({app_id}): {e}")
@@ -151,15 +155,15 @@ class MediaController:
         except Exception as e:
             logger.error(f"SessionManager pause error: {e}")
 
-        return paused_ids
+        return paused
 
-    async def _do_resume(self, app_ids_to_resume):
-        """Fetch fresh sessions and resume those whose app_id is in the list.
+    async def _do_resume(self, paused_sessions):
+        """Fetch fresh sessions and resume those whose (app_id, title) matches the saved sessions.
 
-        Uses fresh session objects (never stale references).
+        Uses fresh session objects.
         """
         resumed = 0
-        target_ids = set(app_ids_to_resume)
+        targets = list(paused_sessions)
 
         try:
             manager = await SessionManager.request_async()
@@ -168,14 +172,25 @@ class MediaController:
             for session in sessions:
                 try:
                     app_id = session.source_app_user_model_id or ""
-                    if app_id not in target_ids:
-                        continue
+                    
+                    title = ""
+                    try:
+                        props = await session.try_get_media_properties_async()
+                        title = props.title or ""
+                    except Exception:
+                        pass
 
-                    # Remove so we only resume once per app
-                    target_ids.discard(app_id)
+                    matched_target = None
+                    for t in targets:
+                        t_app_id, t_title = t
+                        if t_app_id == app_id and (not t_title or t_title == title):
+                            matched_target = t
+                            break
 
-                    await session.try_play_async()
-                    resumed += 1
+                    if matched_target:
+                        targets.remove(matched_target)
+                        await session.try_play_async()
+                        resumed += 1
 
                 except Exception as e:
                     logger.debug(f"Error resuming session ({app_id}): {e}")

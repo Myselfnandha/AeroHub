@@ -86,6 +86,9 @@ def ensure_sound_effects():
         "tech_chirp.wav": "tech_chirp",
         "bubble_pop.wav": "bubble_pop",
         "crystal_bell.wav": "crystal_bell",
+        "ambient_pulse_8d.wav": "ambient_pulse_8d",
+        "space_echo_8d.wav": "space_echo_8d",
+        "zen_harmony_8d.wav": "zen_harmony_8d",
     }
 
     # Public domain short WAV files
@@ -139,10 +142,36 @@ def ensure_sound_effects():
             except Exception as e:
                 logger.error(f"Failed to synthesize {filename}: {e}")
 
+    # Replicate sounds across all modules
+    try:
+        import shutil
+        project_root = os.path.dirname(os.path.dirname(APP_ROOT))
+        battery_sounds_dir = os.path.join(project_root, "toggles", "battery_monitor", "sounds")
+        temp_sounds_dir = os.path.join(project_root, "toggles", "temp_monitor", "sounds")
+
+        os.makedirs(battery_sounds_dir, exist_ok=True)
+        os.makedirs(temp_sounds_dir, exist_ok=True)
+
+        # 1. Copy health_app sounds to battery_monitor/sounds and temp_monitor/sounds
+        for f in os.listdir(sounds_dir):
+            if f.endswith(".wav"):
+                shutil.copy2(os.path.join(sounds_dir, f), os.path.join(battery_sounds_dir, f))
+                shutil.copy2(os.path.join(sounds_dir, f), os.path.join(temp_sounds_dir, f))
+
+        # 2. Copy mac_connect.wav and mac_disconnect.wav from battery_monitor/sounds back to other folders
+        for f in ["mac_connect.wav", "mac_disconnect.wav"]:
+            src_path = os.path.join(battery_sounds_dir, f)
+            if os.path.exists(src_path):
+                shutil.copy2(src_path, os.path.join(sounds_dir, f))
+                shutil.copy2(src_path, os.path.join(temp_sounds_dir, f))
+    except Exception as e:
+        logger.error(f"Failed to replicate sound files across modules: {e}")
+
 
 def _synthesize_wav(filepath, sound_type):
     sample_rate = 44100
-    channels = 1
+    is_8d = sound_type.endswith("_8d")
+    channels = 2 if is_8d else 1
     sampwidth = 2
     samples = []
 
@@ -270,6 +299,96 @@ def _synthesize_wav(filepath, sound_type):
             decay = math.exp(-6.0 * t)
             samples.append(int(val * decay * 16384))
 
+    elif sound_type == "ambient_pulse_8d":
+        duration = 1.8
+        n_samples = int(sample_rate * duration)
+        pan_speed = 0.6
+        for i in range(n_samples):
+            t = i / sample_rate
+            val = (
+                math.sin(2 * math.pi * 150 * t) * 0.5
+                + math.sin(2 * math.pi * 300 * t) * 0.3
+                + math.sin(2 * math.pi * 450 * t) * 0.2
+            )
+            mod = 0.5 + 0.5 * math.sin(2 * math.pi * 3.0 * t)
+            val = val * (0.7 + 0.3 * mod)
+            decay = math.exp(-1.5 * t)
+            
+            pan = math.sin(2 * math.pi * pan_speed * t)
+            left_vol = math.sqrt(0.5 * (1 + pan))
+            right_vol = math.sqrt(0.5 * (1 - pan))
+            
+            sample_val = val * decay
+            left_sample = max(-32767, min(32767, int(sample_val * left_vol * 16384)))
+            right_sample = max(-32767, min(32767, int(sample_val * right_vol * 16384)))
+            samples.append(left_sample)
+            samples.append(right_sample)
+
+    elif sound_type == "space_echo_8d":
+        duration = 2.0
+        n_samples = int(sample_rate * duration)
+        pan_speed = 0.8
+        for i in range(n_samples):
+            t = i / sample_rate
+            val1 = math.sin(2 * math.pi * 880 * t) * math.exp(-8.0 * t)
+            
+            val2 = 0.0
+            if t > 0.3:
+                val2 = 0.5 * math.sin(2 * math.pi * 880 * (t - 0.3)) * math.exp(-5.0 * (t - 0.3))
+                
+            val3 = 0.0
+            if t > 0.6:
+                val3 = 0.25 * math.sin(2 * math.pi * 880 * (t - 0.6)) * math.exp(-4.0 * (t - 0.6))
+                
+            pan1 = math.sin(2 * math.pi * pan_speed * t)
+            pan2 = math.sin(2 * math.pi * pan_speed * (t - 0.15))
+            pan3 = math.sin(2 * math.pi * pan_speed * (t - 0.30))
+            
+            left_vol1 = math.sqrt(0.5 * (1 + pan1))
+            right_vol1 = math.sqrt(0.5 * (1 - pan1))
+            
+            left_vol2 = math.sqrt(0.5 * (1 + pan2))
+            right_vol2 = math.sqrt(0.5 * (1 - pan2))
+            
+            left_vol3 = math.sqrt(0.5 * (1 + pan3))
+            right_vol3 = math.sqrt(0.5 * (1 - pan3))
+            
+            left_val = (val1 * left_vol1 + val2 * left_vol2 + val3 * left_vol3)
+            right_val = (val1 * right_vol1 + val2 * right_vol2 + val3 * right_vol3)
+            
+            left_sample = max(-32767, min(32767, int(left_val * 16384)))
+            right_sample = max(-32767, min(32767, int(right_val * 16384)))
+            samples.append(left_sample)
+            samples.append(right_sample)
+
+    elif sound_type == "zen_harmony_8d":
+        duration = 2.5
+        n_samples = int(sample_rate * duration)
+        pan_speed = 0.4
+        for i in range(n_samples):
+            t = i / sample_rate
+            if t < 0.3:
+                env = t / 0.3
+            else:
+                env = math.exp(-1.5 * (t - 0.3))
+                
+            val = (
+                math.sin(2 * math.pi * 220 * t) * 0.4
+                + math.sin(2 * math.pi * 275 * t) * 0.3
+                + math.sin(2 * math.pi * 330 * t) * 0.2
+                + math.sin(2 * math.pi * 440 * t) * 0.1
+            )
+            
+            pan = math.sin(2 * math.pi * pan_speed * t)
+            left_vol = math.sqrt(0.5 * (1 + pan))
+            right_vol = math.sqrt(0.5 * (1 - pan))
+            
+            sample_val = val * env
+            left_sample = max(-32767, min(32767, int(sample_val * left_vol * 16384)))
+            right_sample = max(-32767, min(32767, int(sample_val * right_vol * 16384)))
+            samples.append(left_sample)
+            samples.append(right_sample)
+
     else:
         duration = 0.2
         n_samples = int(sample_rate * duration)
@@ -325,7 +444,7 @@ def get_sapi_voices() -> list:
         return ["Default"]
 
 
-def speak_sapi_async(text: str, voice_name: str = "Default", volume: int = 80, rate: int = 0):
+def speak_sapi_async(text: str, voice_name: str = "Default", volume: int = 80, rate: int = 0, pitch: int = 0):
     """Speak SAPI text in a background thread to prevent GUI lockup."""
     import threading
 
@@ -343,7 +462,12 @@ def speak_sapi_async(text: str, voice_name: str = "Default", volume: int = 80, r
                         break
             speaker.Volume = max(0, min(100, int(volume)))
             speaker.Rate = max(-10, min(10, int(rate)))
-            speaker.Speak(text)
+            if pitch != 0:
+                pitch_val = max(-10, min(10, int(pitch)))
+                xml_text = f"<pitch middle='{pitch_val}'>{text}</pitch>"
+                speaker.Speak(xml_text, 8)  # 8 is SPF_IS_XML
+            else:
+                speaker.Speak(text)
         except Exception as e:
             logger.error(f"SAPI voice error: {e}")
         finally:

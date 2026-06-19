@@ -1,7 +1,7 @@
 import asyncio
 import traceback
 
-from MovieSongDownloader.core.database import db
+from movie_song_downloader.core.database import db
 
 async def main():
     try:

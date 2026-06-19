@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """
 Touch Toggle — System Tray App
 Provides a tray icon that shows touchscreen ON/OFF state.
@@ -37,9 +38,9 @@ LOG_PATH = os.path.join(LOGS_DIR, "touch_toggle.log")
 # Allow importing from parent directory (AeroHub root)
 if PROJECT_DIR not in sys.path:
     sys.path.append(PROJECT_DIR)
-import system_utils
+import services.aerohub_core.system_utils as system_utils
 try:
-    from toast_utils import BaseToast, EmojiPickerPanel
+    from services.aerohub_core.toast_utils import BaseToast, EmojiPickerPanel
 except ImportError:
     pass
 
@@ -174,6 +175,14 @@ class SettingsWindow:
         except Exception:
             pass
 
+        try:
+            from PIL import ImageTk
+            icon_img = create_icon_image(touch_enabled)
+            self.icon_photo = ImageTk.PhotoImage(icon_img)
+            root.iconphoto(False, self.icon_photo)
+        except Exception as e:
+            logger.error(f"Failed to set window icon: {e}")
+
         def on_closing():
             if (
                 hasattr(self, "preview_instance")
@@ -201,7 +210,7 @@ class SettingsWindow:
             fg=TH["accent"],
         ).pack(pady=(30, 40))
 
-        tk.Button(
+        self.btn_save = tk.Button(
             self.sidebar,
             text="[ SAVE_CFG ]",
             font=("Consolas", 12, "bold"),
@@ -211,8 +220,9 @@ class SettingsWindow:
             activeforeground=TH["accent"],
             relief=tk.FLAT,
             cursor="hand2",
-            command=lambda: self._save_and_close(root),
-        ).pack(side=tk.BOTTOM, pady=20, padx=20, fill=tk.X)
+            command=self._save_settings_clicked,
+        )
+        self.btn_save.pack(side=tk.BOTTOM, pady=20, padx=20, fill=tk.X)
 
         self.content_area = tk.Frame(main_container, bg=TH["bg"])
         self.content_area.pack(
@@ -443,18 +453,15 @@ class SettingsWindow:
         self.entries[key] = (var, True)
 
     def _schedule_preview(self):
-        if hasattr(self, "_preview_timer") and self._preview_timer:
-            try:
-                self.parent.after_cancel(self._preview_timer)
-            except Exception:
-                pass
-        self._preview_timer = self.parent.after(400, self._preview_toast)
+        self._preview_toast(is_auto_edit=True)
 
-    def _preview_toast(self):
-        if hasattr(self, "preview_instance") and getattr(
-            self.preview_instance, "force_close", None
-        ):
-            self.preview_instance.force_close()
+    def _preview_toast(self, is_auto_edit=False):
+        toast_exists = False
+        if hasattr(self, "preview_instance") and self.preview_instance:
+            if getattr(self.preview_instance, "toast_window", None) and self.preview_instance.toast_window.winfo_exists():
+                toast_exists = True
+            else:
+                self.preview_instance = None
 
         temp_settings = dict(self.settings)
         for key, (var, var_type) in self.entries.items():
@@ -471,12 +478,34 @@ class SettingsWindow:
             except ValueError:
                 pass
 
-        self.preview_instance = BaseToast(
-            self.parent, "TOUCH PREVIEW", "Preview Toast", temp_settings
-        )
-        self.preview_instance.show()
+        if is_auto_edit:
+            temp_settings["toast_auto_dismiss"] = False
+            temp_settings["toast_enable_sound"] = False
 
-    def _save_and_close(self, root):
+        if toast_exists:
+            try:
+                self.preview_instance.update_settings(temp_settings)
+            except Exception as e:
+                logger.error(f"Error updating preview in-place: {e}")
+        else:
+            if hasattr(self, "preview_instance") and self.preview_instance:
+                try:
+                    self.preview_instance.force_close()
+                except Exception:
+                    pass
+            self.preview_instance = BaseToast(
+                self.parent, "TOUCH PREVIEW", "Preview Toast", temp_settings
+            )
+            self.preview_instance.show()
+
+    def _save_settings_clicked(self):
+        if hasattr(self, "preview_instance") and self.preview_instance:
+            try:
+                self.preview_instance.force_close()
+            except Exception:
+                pass
+            self.preview_instance = None
+
         for key, (var, var_type) in self.entries.items():
             val = var.get()
             try:
@@ -492,8 +521,14 @@ class SettingsWindow:
                 pass
         save_settings(self.settings)
         self.on_save(self.settings)
-        root.grab_release()
-        root.destroy()
+
+        self.btn_save.config(text="[ SAVED ]", state=tk.DISABLED)
+        def reset_btn():
+            try:
+                self.btn_save.config(text="[ SAVE_CFG ]", state=tk.NORMAL)
+            except Exception:
+                pass
+        self.parent.after(2000, reset_btn)
 
 
 def create_icon_image(enabled: bool) -> Image.Image:

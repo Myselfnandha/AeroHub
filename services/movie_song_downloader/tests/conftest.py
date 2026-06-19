@@ -10,9 +10,9 @@ workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(SCRIPT_DIR)))
 services_dir = os.path.join(workspace_root, "services")
 
 if workspace_root not in sys.path:
-    sys.path.insert(0, workspace_root)
+    sys.path.append(workspace_root)
 if services_dir not in sys.path:
-    sys.path.insert(0, services_dir)
+    sys.path.append(services_dir)
 
 # Register Redirector so MovieSongDownloader -> movie_song_downloader works seamlessly
 class MovieSongDownloaderRedirector(MetaPathFinder):
@@ -29,8 +29,8 @@ if not any(isinstance(finder, MovieSongDownloaderRedirector) for finder in sys.m
     sys.meta_path.insert(0, MovieSongDownloaderRedirector())
 
 import pytest
-import MovieSongDownloader.config
-from MovieSongDownloader.core.database import db
+import movie_song_downloader.config
+from movie_song_downloader.core.database import db
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -40,7 +40,7 @@ def use_test_database(tmp_path_factory):
     test_db_path = test_db_dir / "test_db.sqlite3"
 
     # Patch the configuration path and the instantiated database manager path
-    MovieSongDownloader.config.DATABASE_PATH = test_db_path
+    movie_song_downloader.config.DATABASE_PATH = test_db_path
     db.db_path = test_db_path
 
     yield

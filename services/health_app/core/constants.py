@@ -113,11 +113,16 @@ DEFAULT_SETTINGS = {
     "toast_volume": 80,
     "toast_border_style": "Solid",
     "toast_stripe_pos": "Left",
+    "toast_show_clock": False,
     "wellness_points": 0,
     "current_streak": 0,
     "ht_enabled": True,
     "ht_interval_min": 10,
     "ht_duration_sec": 5,
+    "ht_night_enabled": True,
+    "ht_night_interval_min": 30,
+    "ht_night_duration_sec": 5,
+    "ht_night_toast_pos": "Bottom-Right",
     "ht_cat_breathing": True,
     "ht_cat_eye_care": True,
     "ht_cat_posture": True,
@@ -157,6 +162,7 @@ DEFAULT_SETTINGS = {
     "ht_toast_volume": 80,
     "ht_toast_border_style": "Solid",
     "ht_toast_stripe_pos": "Left",
+    "ht_toast_show_clock": False,
     "bc_enabled": True,
     "bc_start_time": "23:00",
     "bc_end_time": "06:00",
@@ -196,6 +202,9 @@ DEFAULT_SETTINGS = {
     "nc_start_time": "23:59",
     "nc_end_time": "06:00",
     "nc_interval_minutes": 5,
+    "nc_flick_enabled": True,
+    "nc_flick_hold_sec": 1.0,
+    "nc_flick_fade_sec": 3.0,
     "nc_slogans": (
         "It's late. Your body needs rest. 🌙|"
         "Go to sleep. Tomorrow is a new day. 💤|"
@@ -250,6 +259,10 @@ DEFAULT_SETTINGS = {
     "voice_break_type": "Both",
     "voice_min_duration_sec": 15,
     "voice_name": "Default",
+    "location_check_interval_hours": 1,
+    "bc_skip_until": 0.0,
+    "voice_start_delay_sec": 3,
+    "voice_pitch": 0,
 }
 
 SOUND_EFFECTS = [
@@ -263,6 +276,9 @@ SOUND_EFFECTS = [
     "tech_chirp",
     "bubble_pop",
     "crystal_bell",
+    "ambient_pulse_8d",
+    "space_echo_8d",
+    "zen_harmony_8d",
     "SystemAsterisk",
     "SystemExclamation",
     "SystemHand",

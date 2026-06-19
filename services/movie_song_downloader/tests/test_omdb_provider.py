@@ -1,9 +1,9 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from MovieSongDownloader.core.database import db
-from MovieSongDownloader.core.settings_manager import settings_manager
-from MovieSongDownloader.core.models import Movie
-from MovieSongDownloader.providers.omdb_provider import OMDbProvider
+from movie_song_downloader.core.database import db
+from movie_song_downloader.core.settings_manager import settings_manager
+from movie_song_downloader.core.models import Movie
+from movie_song_downloader.providers.omdb_provider import OMDbProvider
 
 
 @pytest.mark.asyncio

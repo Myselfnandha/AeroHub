@@ -1,4 +1,7 @@
 {
     "invert_scroll": false,
-    "step_multiplier": 1
+    "step_multiplier": 1,
+    "enable_brightness_control": true,
+    "brightness_step": 5,
+    "enable_touchpad_support": true
 }

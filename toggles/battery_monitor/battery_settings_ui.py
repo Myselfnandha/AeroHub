@@ -20,7 +20,7 @@ root_dir = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 if root_dir not in sys.path:
     sys.path.append(root_dir)
 
-from toast_utils import BaseToast, EmojiPickerPanel  # noqa: E402
+from services.aerohub_core.toast_utils import BaseToast, EmojiPickerPanel  # noqa: E402
 
 
 class SettingsWindow:
@@ -49,6 +49,15 @@ class SettingsWindow:
         except Exception:
             pass
 
+        try:
+            from PIL import ImageTk
+            from toggles.battery_monitor.battery_monitor import create_battery_icon
+            icon_img = create_battery_icon(100, False)
+            self.icon_photo = ImageTk.PhotoImage(icon_img)
+            self.window.iconphoto(False, self.icon_photo)
+        except Exception:
+            pass
+
         # Scan available sounds
         sounds_dir = os.path.join(SCRIPT_DIR, "sounds")
         wav_files = []
@@ -74,6 +83,14 @@ class SettingsWindow:
         self._build_ui()
 
     def _on_close(self):
+        if hasattr(self, "preview_instances") and self.preview_instances:
+            for t in list(self.preview_instances):
+                try:
+                    t.force_close()
+                except Exception:
+                    pass
+            self.preview_instances = []
+
         # Safely delete Tkinter variables in the main thread to prevent their __del__
         # from being called by the garbage collector in a background thread,
         # which causes random STATUS_BREAKPOINT crashes in tcl86t.dll.
@@ -143,7 +160,7 @@ class SettingsWindow:
             btn.pack(fill=tk.X, pady=4)
             self.nav_buttons[name] = btn
 
-        tk.Button(
+        self.btn_save = tk.Button(
             self.sidebar,
             text="[ SAVE_CFG ]",
             font=("Consolas", 12, "bold"),
@@ -154,8 +171,9 @@ class SettingsWindow:
             relief=tk.FLAT,
             cursor="hand2",
             pady=12,
-            command=self._save,
-        ).pack(side=tk.BOTTOM, fill=tk.X, padx=16, pady=24)
+            command=self._save_settings_clicked,
+        )
+        self.btn_save.pack(side=tk.BOTTOM, fill=tk.X, padx=16, pady=24)
 
         switch_tab("General")
 
@@ -196,17 +214,100 @@ class SettingsWindow:
             anchor=tk.W,
         ).grid(row=row, column=0, sticky=tk.W, pady=8)
         var = tk.StringVar(value=str(self.settings.get(key, values[0])))
-        ttk.Combobox(
-            parent_frame,
+
+        f = tk.Frame(parent_frame, bg=TH["bg"])
+        f.grid(row=row, column=1, sticky=tk.E, pady=8, padx=(20, 0))
+
+        if key.endswith("_sound_effect") or "sound_" in key:
+            prefix = "toast_" if key.startswith("toast_") else ""
+            btn_test = tk.Button(
+                f,
+                text="🔊",
+                font=("Segoe UI Symbol", 8),
+                bg=TH["bg3"],
+                fg=TH["accent"],
+                activebackground=TH["bg2"],
+                activeforeground=TH["accent"],
+                relief=tk.FLAT,
+                bd=0,
+                cursor="hand2",
+                width=3,
+                command=lambda k=key, p=prefix: self._test_sound_by_key_and_prefix(k, p)
+            )
+            btn_test.pack(side=tk.RIGHT, padx=(5, 0))
+            def on_enter(e, b=btn_test): b.config(bg=TH["bg2"])
+            def on_leave(e, b=btn_test): b.config(bg=TH["bg3"])
+            btn_test.bind("<Enter>", on_enter)
+            btn_test.bind("<Leave>", on_leave)
+
+        combo = ttk.Combobox(
+            f,
             textvariable=var,
             values=values,
             font=("Consolas", 10),
             state="readonly",
             width=12,
-        ).grid(row=row, column=1, sticky=tk.E, pady=8, padx=(20, 0))
+        )
+        combo.pack(side=tk.LEFT)
+
         self.entries[key] = (var, True)
         if key.startswith("toast_"):
             var.trace_add("write", lambda *args: self._schedule_preview())
+
+    def _test_sound_by_key_and_prefix(self, key, prefix):
+        if key in self.entries:
+            snd_choice = self.entries[key][0].get()
+        else:
+            snd_choice = self.settings.get(key, "mac_connect")
+        if not snd_choice or snd_choice == "None":
+            return
+
+        vol_key = f"{prefix}volume"
+        if vol_key in self.entries:
+            try:
+                volume = float(self.entries[vol_key][0].get())
+            except ValueError:
+                volume = 80.0
+        else:
+            volume = float(self.settings.get(vol_key, 80))
+
+        try:
+            import winsound
+            system_aliases = [
+                "SystemAsterisk",
+                "SystemExclamation",
+                "SystemHand",
+                "SystemQuestion",
+                "SystemDefault",
+            ]
+            if snd_choice in system_aliases:
+                winsound.PlaySound(snd_choice, winsound.SND_ALIAS | winsound.SND_ASYNC)
+                return
+
+            if not snd_choice.endswith(".wav"):
+                snd_choice += ".wav"
+
+            # Look in battery_monitor sounds first, then health_app resources, then temp_monitor
+            path = os.path.join(SCRIPT_DIR, "sounds", snd_choice)
+            if not os.path.exists(path):
+                path = os.path.join(os.path.dirname(os.path.dirname(SCRIPT_DIR)), "services", "health_app", "resources", "sounds", snd_choice)
+            if not os.path.exists(path):
+                path = os.path.join(os.path.dirname(SCRIPT_DIR), "temp_monitor", "sounds", snd_choice)
+
+            try:
+                import pygame
+                if pygame.mixer.get_init() and path and os.path.exists(path):
+                    sound = pygame.mixer.Sound(path)
+                    sound.set_volume(volume / 100.0)
+                    sound.play()
+                    return
+            except Exception:
+                pass
+
+            if os.path.exists(path):
+                winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+        except Exception as e:
+            print(f"Error testing sound: {e}")
 
     def _add_sound_field(self, parent_frame, label, key, row, sound_choices):
         tk.Label(
@@ -498,17 +599,9 @@ class SettingsWindow:
         self._add_field(f2_right, "Duration (sec):", "toast_duration_sec", 9)
         self._add_field(f2_right, "Transition (ms):", "toast_transition_time_ms", 10)
 
-        sound_choices = [
-            "mac_connect",
-            "mac_disconnect",
-            "SystemAsterisk",
-            "SystemExclamation",
-            "SystemHand",
-            "SystemQuestion",
-            "SystemDefault",
-        ]
+        toast_sound_choices = [s for s in self.sound_choices if s != "None"]
         self._add_combo(
-            f2_right, "Sound Effect:", "toast_sound_effect", 10, sound_choices
+            f2_right, "Sound Effect:", "toast_sound_effect", 10, toast_sound_choices
         )
 
         f3 = tk.Frame(scrollable_frame, bg=TH["bg"])
@@ -539,18 +632,18 @@ class SettingsWindow:
         ).pack(side=tk.RIGHT)
 
     def _schedule_preview(self):
-        if hasattr(self, "_preview_timer") and self._preview_timer:
-            try:
-                self.window.after_cancel(self._preview_timer)
-            except Exception:
-                pass
-        self._preview_timer = self.window.after(400, self._preview_toast)
+        self._preview_toast(is_auto_edit=True)
 
-    def _preview_toast(self):
-        if hasattr(self, "preview_instance") and getattr(
-            self.preview_instance, "force_close", None
-        ):
-            self.preview_instance.force_close()
+    def _preview_toast(self, is_auto_edit=False):
+        if hasattr(self, "preview_instances") and self.preview_instances:
+            for t in list(self.preview_instances):
+                try:
+                    t.force_close()
+                except Exception:
+                    pass
+            self.preview_instances = []
+        else:
+            self.preview_instances = []
 
         temp_settings = dict(self.settings)
         for key, (var, var_type) in self.entries.items():
@@ -561,18 +654,39 @@ class SettingsWindow:
                 elif key in ("toast_opacity",):
                     temp_settings[key] = float(val)
                 elif var_type is False:
-                    temp_settings[key] = int(val)
+                    temp_settings[key] = int(float(val))
                 else:
                     temp_settings[key] = val
             except ValueError:
                 pass
 
-        self.preview_instance = BaseToast(
-            self.window, "BATTERY PREVIEW", "Battery is full", temp_settings
-        )
-        self.preview_instance.show()
+        if is_auto_edit:
+            temp_settings["toast_auto_dismiss"] = False
+            temp_settings["toast_enable_sound"] = False
 
-    def _save(self):
+        temp_settings["is_preview"] = True
+
+        previews = [
+            ("CHARGER CONNECTED", "AC power is connected. Charging... ⚡"),
+            ("CHARGER DISCONNECTED", "Running on battery power. 🔋"),
+            ("BATTERY SUFFICIENT", f"Battery has reached {temp_settings.get('full_threshold', 95)}%."),
+            ("BATTERY LOW", f"Battery is low ({temp_settings.get('low_threshold', 30)}%)! Please connect charger.")
+        ]
+
+        for title, msg in previews:
+            t = BaseToast(self.window, title, msg, temp_settings)
+            t.show()
+            self.preview_instances.append(t)
+
+    def _save_settings_clicked(self):
+        if hasattr(self, "preview_instances") and self.preview_instances:
+            for t in list(self.preview_instances):
+                try:
+                    t.force_close()
+                except Exception:
+                    pass
+            self.preview_instances = []
+
         for key, (var, var_type) in self.entries.items():
             val = var.get()
             try:
@@ -581,10 +695,17 @@ class SettingsWindow:
                 elif key in ("toast_opacity",):
                     self.settings[key] = float(val)
                 elif var_type is False:
-                    self.settings[key] = int(val)
+                    self.settings[key] = int(float(val))
                 else:
                     self.settings[key] = val
             except ValueError:
                 pass
         self.on_save(self.settings)
-        self._on_close()
+
+        self.btn_save.config(text="[ SAVED ]", state=tk.DISABLED)
+        def reset_btn():
+            try:
+                self.btn_save.config(text="[ SAVE_CFG ]", state=tk.NORMAL)
+            except Exception:
+                pass
+        self.window.after(2000, reset_btn)

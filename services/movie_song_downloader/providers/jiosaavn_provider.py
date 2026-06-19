@@ -3,12 +3,12 @@ import hashlib
 from typing import List, Optional
 from jiosaavnpy import JioSaavn
 
-from MovieSongDownloader.providers.base import BaseSoundtrackProvider
-from MovieSongDownloader.core.models import Album, Track
-from MovieSongDownloader.core.rate_limiter import rate_limiter, providers_logger
-from MovieSongDownloader.core.cache_manager import api_cache
+from movie_song_downloader.providers.base import BaseSoundtrackProvider
+from movie_song_downloader.core.models import Album, Track
+from movie_song_downloader.core.rate_limiter import rate_limiter, providers_logger
+from movie_song_downloader.core.cache_manager import api_cache
 
-logger = logging.getLogger("MovieSongDownloader.JioSaavnProvider")
+logger = logging.getLogger("movie_song_downloader.JioSaavnProvider")
 
 
 class JioSaavnProvider(BaseSoundtrackProvider):

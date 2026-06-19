@@ -3,9 +3,9 @@ import re
 import json
 import logging
 from typing import Tuple, List, Optional
-from MovieSongDownloader.core.models import Movie, Album, Track
+from movie_song_downloader.core.models import Movie, Album, Track
 
-logger = logging.getLogger("MovieSongDownloader.SpotifyProvider")
+logger = logging.getLogger("movie_song_downloader.SpotifyProvider")
 
 
 class SpotifyProvider:

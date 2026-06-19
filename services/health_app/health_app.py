@@ -9,7 +9,7 @@ import os
 import sys
 
 # ── Dynamic Path Setup ──
-# Ensure parent directory is in sys.path to import system_utils and toast_utils
+# Ensure parent directory is in sys.path to import services.aerohub_core.system_utils as system_utils and toast_utils
 # and ensure HealthApp directory is in sys.path for submodule imports.
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(os.path.dirname(SCRIPT_DIR))
@@ -56,10 +56,10 @@ from ui.theme import create_health_icon
 from ui.toast import WarningToast, BrightnessWarningToast
 from ui.overlay import BreakOverlay, SBC_AVAILABLE, sbc
 from ui.settings_ui import SettingsWindow
-import system_utils
+import services.aerohub_core.system_utils as system_utils
 import pystray
 import psutil
-from toast_utils import BaseToast
+from services.aerohub_core.toast_utils import BaseToast
 
 # ── Re-expose symbols for backward compatibility and testing ──
 __all__ = [
@@ -98,6 +98,8 @@ class HealthApp:
         self._long_warn_shown = False
         self.gui_queue = queue.Queue()
         self.udp_sock = None
+        self._settings_window = None
+        self._brightness_is_adjusting = False
 
     def _set_self_priority(self, level: str):
         try:
@@ -318,7 +320,7 @@ class HealthApp:
                 if self._game_mode:
                     self._set_self_priority("normal")
                 try:
-                    from toast_utils import read_shared_status, write_shared_status
+                    from services.aerohub_core.toast_utils import read_shared_status, write_shared_status
                     status = read_shared_status()
                     status["break_warning_active"] = True
                     status["break_warning_pid"] = os.getpid()
@@ -327,7 +329,7 @@ class HealthApp:
                 except Exception:
                     pass
                 self.gui_queue.put(
-                    ("warning", (f"Long break in {pre_warn} seconds", pre_warn))
+                    ("warning", ("Long Break", pre_warn))
                 )
                 self._long_warn_shown = True
             return
@@ -348,7 +350,7 @@ class HealthApp:
                 if self._game_mode:
                     self._set_self_priority("normal")
                 try:
-                    from toast_utils import read_shared_status, write_shared_status
+                    from services.aerohub_core.toast_utils import read_shared_status, write_shared_status
                     status = read_shared_status()
                     status["break_warning_active"] = True
                     status["break_warning_pid"] = os.getpid()
@@ -357,7 +359,7 @@ class HealthApp:
                 except Exception:
                     pass
                 self.gui_queue.put(
-                    ("warning", (f"Short break in {pre_warn} seconds", pre_warn))
+                    ("warning", ("Short Break", pre_warn))
                 )
                 self._short_warn_shown = True
 
@@ -467,16 +469,26 @@ class HealthApp:
                     time.sleep(2)
                     continue
 
-                if not self.settings.get("ht_enabled", True):
-                    time.sleep(1)
-                    continue
+                nc_start = self.settings.get("nc_start_time", "23:59")
+                nc_end = self.settings.get("nc_end_time", "06:00")
+                is_night = _is_time_between(nc_start, nc_end)
+
+                if is_night:
+                    if not self.settings.get("ht_night_enabled", True):
+                        time.sleep(1)
+                        continue
+                    interval_sec = self.settings.get("ht_night_interval_min", 30) * 60
+                else:
+                    if not self.settings.get("ht_enabled", True):
+                        time.sleep(1)
+                        continue
+                    interval_sec = self.settings.get("ht_interval_min", 10) * 60
 
                 if self._paused:
                     time.sleep(1)
                     self._last_health_toast += 1
                     continue
 
-                interval_sec = self.settings.get("ht_interval_min", 10) * 60
                 if now - self._last_health_toast >= interval_sec:
                     self._trigger_health_toast()
                     self._last_health_toast = now
@@ -527,7 +539,12 @@ class HealthApp:
                     time.sleep(2)
                     continue
 
-                if not self.settings.get("bc_enabled", True) or not SBC_AVAILABLE:
+                if getattr(self, "_brightness_is_adjusting", False):
+                    high_start = None
+                    time.sleep(5)
+                    continue
+
+                if not self.settings.get("bc_enabled", True) or not SBC_AVAILABLE or time.time() < self.settings.get("bc_skip_until", 0.0):
                     time.sleep(5)
                     continue
 
@@ -561,26 +578,39 @@ class HealthApp:
                 now = time.time()
                 if curr_b > target_b:
                     if high_start is None:
-                        high_start = now
+                        try:
+                            start_parts = start_time.split(":")
+                            dt_now = datetime.datetime.now()
+                            dt_start = dt_now.replace(
+                                hour=int(start_parts[0]),
+                                minute=int(start_parts[1]),
+                                second=0,
+                                microsecond=0,
+                            )
+                            if dt_start > dt_now:
+                                dt_start -= datetime.timedelta(days=1)
+                            high_start = dt_start.timestamp()
+                        except Exception:
+                            high_start = now
+                    
+                    elapsed_min = (now - high_start) / 60.0
+
+                    if curr_b >= agg_target_b:
+                        threshold = agg_duration_min
                     else:
-                        elapsed_min = (now - high_start) / 60.0
+                        threshold = duration_min
 
-                        if curr_b >= agg_target_b:
-                            threshold = agg_duration_min
-                        else:
-                            threshold = duration_min
-
-                        if elapsed_min >= threshold:
-                            if (
-                                now - last_alert_time > 120
-                            ):  # 2 minute cooldown between alerts
-                                logger.info(
-                                    f"Screen brightness ({curr_b}%) exceeds target ({target_b}%) "
-                                    f"for {elapsed_min:.1f} mins. Triggering alert."
-                                )
-                                is_agg = curr_b >= agg_target_b
-                                self.gui_queue.put(("brightness_care", {"is_aggressive": is_agg}))
-                                last_alert_time = now
+                    if elapsed_min >= threshold:
+                        if (
+                            now - last_alert_time > 120
+                        ):  # 2 minute cooldown between alerts
+                            logger.info(
+                                f"Screen brightness ({curr_b}%) exceeds target ({target_b}%) "
+                                f"for {elapsed_min:.1f} mins. Triggering alert."
+                            )
+                            is_agg = curr_b >= agg_target_b
+                            self.gui_queue.put(("brightness_care", {"is_aggressive": is_agg}))
+                            last_alert_time = now
                 else:
                     high_start = None
 
@@ -589,9 +619,10 @@ class HealthApp:
 
             time.sleep(5)
 
-    def _decrease_brightness(self, is_aggressive=False):
+    def _decrease_brightness(self, is_aggressive=False, on_update=None, on_complete=None):
         if SBC_AVAILABLE:
             try:
+                self._brightness_is_adjusting = True
                 target_b = self.settings.get("bc_target_brightness", 2)
                 trans_sec = self.settings.get("bc_aggressive_transition_time_sec", 30) if is_aggressive else self.settings.get("bc_transition_time_sec", 5)
                 
@@ -599,23 +630,117 @@ class HealthApp:
                 start_b = int(b_list[0]) if isinstance(b_list, list) and b_list else int(b_list)
                 
                 def fade():
-                    steps = int(trans_sec * 10)
-                    if steps <= 0:
-                        sbc.set_brightness(target_b)
-                        return
-                    step_delay = trans_sec / steps
-                    for i in range(1, steps + 1):
-                        val = start_b + (target_b - start_b) * (i / steps)
-                        sbc.set_brightness(int(val))
-                        time.sleep(step_delay)
-                    logger.info(f"Brightness gradually decreased to target: {target_b}% over {trans_sec}s")
+                    try:
+                        total_diff = target_b - start_b
+                        if total_diff == 0:
+                            if on_complete:
+                                on_complete()
+                            logger.info(f"Target brightness {target_b}% reached. Cooling down for 10s...")
+                            time.sleep(10)
+                            return
+
+                        # Ensure WMI is not flooded; limit steps to at most 2 updates per second (min 0.5s delay)
+                        min_delay = 0.5
+                        max_updates = int(trans_sec / min_delay)
+                        if max_updates <= 0:
+                            max_updates = 1
+                        
+                        num_updates = min(abs(total_diff), max_updates)
+                        step_delay = trans_sec / num_updates
+                        
+                        last_set_val = start_b
+                        for i in range(1, num_updates + 1):
+                            val = start_b + total_diff * (i / num_updates)
+                            curr_val = int(round(val))
+                            if curr_val != last_set_val:
+                                sbc.set_brightness(curr_val)
+                                last_set_val = curr_val
+                            if on_update:
+                                on_update(curr_val)
+                            time.sleep(step_delay)
+                        
+                        if last_set_val != target_b:
+                            sbc.set_brightness(target_b)
+                        if on_update:
+                            on_update(target_b)
+                            
+                        # Immediately trigger GUI completion (which destroys the toast window)
+                        if on_complete:
+                            on_complete()
+                        
+                        # Cool down for 10 seconds post-fade to allow OS brightness values to settle
+                        logger.info(f"Target brightness {target_b}% reached. Cooling down for 10s...")
+                        time.sleep(10)
+                    except Exception as fe:
+                        logger.error(f"Fading error: {fe}")
+                        if on_complete:
+                            on_complete()
+                    finally:
+                        self._brightness_is_adjusting = False
                 
                 threading.Thread(target=fade, daemon=True).start()
             except Exception as e:
+                self._brightness_is_adjusting = False
                 logger.error(f"Failed to decrease brightness: {e}")
+                if on_complete:
+                    on_complete()
+        else:
+            if on_complete:
+                on_complete()
 
     def _skip_brightness_warning(self):
         logger.info("Brightness warning skipped by user.")
+
+    def _skip_brightness_permanent(self):
+        logger.info("Brightness warning skipped permanently (until midnight) by user.")
+        import datetime
+        now = datetime.datetime.now()
+        tomorrow = datetime.datetime.combine(now.date() + datetime.timedelta(days=1), datetime.time.min)
+        midnight_ts = tomorrow.timestamp()
+        self.settings["bc_skip_until"] = midnight_ts
+        save_settings(self.settings)
+
+    def _skip_brightness_duration(self, minutes):
+        logger.info(f"Brightness warning skipped for {minutes} minutes by user.")
+        self.settings["bc_skip_until"] = time.time() + minutes * 60
+        save_settings(self.settings)
+
+    def _play_screen_flick(self, hold_sec, fade_sec):
+        flick_win = tk.Toplevel(self.root)
+        flick_win.attributes("-topmost", True)
+        flick_win.attributes("-alpha", 1.0)
+        flick_win.configure(bg="black")
+        flick_win.overrideredirect(True)
+        # Cover entire virtual screen
+        v_width = self.root.winfo_vrootwidth()
+        v_height = self.root.winfo_vrootheight()
+        v_x = self.root.winfo_vrootx()
+        v_y = self.root.winfo_vrooty()
+        # Fallback to screen width/height if vroot is zero
+        if v_width <= 0:
+            v_width = self.root.winfo_screenwidth()
+            v_height = self.root.winfo_screenheight()
+            v_x = 0
+            v_y = 0
+        flick_win.geometry(f"{v_width}x{v_height}+{v_x}+{v_y}")
+
+        def start_fade():
+            steps = int(fade_sec * 20)  # 20 steps per second
+            if steps <= 0:
+                flick_win.destroy()
+                return
+
+            def step(i):
+                if i > steps:
+                    flick_win.destroy()
+                    return
+                alpha = 1.0 - (i / steps)
+                flick_win.attributes("-alpha", alpha)
+                flick_win.after(int((fade_sec / steps) * 1000), lambda: step(i + 1))
+
+            step(1)
+
+        flick_win.after(int(hold_sec * 1000), start_fade)
 
     def _night_care_loop(self):
         """Background thread: remind user to sleep periodically during night hours."""
@@ -669,6 +794,12 @@ class HealthApp:
 
                     selected_slogan = random.choice(slogans)
                     logger.info(f"Triggering night care toast: {selected_slogan}")
+                    
+                    if self.settings.get("nc_flick_enabled", True):
+                        hold_sec = self.settings.get("nc_flick_hold_sec", 1.0)
+                        fade_sec = self.settings.get("nc_flick_fade_sec", 3.0)
+                        self.gui_queue.put(("screen_flick", {"hold_sec": hold_sec, "fade_sec": fade_sec}))
+                    
                     self.gui_queue.put(("night_care_toast", selected_slogan))
                     self._last_night_care = now
 
@@ -676,6 +807,92 @@ class HealthApp:
                 logger.error(f"Night Care loop error: {e}")
 
             time.sleep(1)
+
+    def _location_check_loop(self):
+        """Background thread: silently check geolocation periodically."""
+        logger.info("Location auto-check thread started.")
+        last_check_time = 0
+        
+        while self._running:
+            try:
+                now = time.time()
+                interval_hours = self.settings.get("location_check_interval_hours", 1)
+                
+                if interval_hours <= 0:
+                    # Location auto-check disabled
+                    time.sleep(10)
+                    continue
+                
+                interval_sec = interval_hours * 3600
+                if now - last_check_time >= interval_sec:
+                    self._perform_silent_location_check()
+                    last_check_time = now
+            except Exception as e:
+                logger.error(f"Location check loop error: {e}")
+            
+            time.sleep(10)
+
+    def _perform_silent_location_check(self):
+        import urllib.request
+        import json
+        
+        logger.info("[LOCATION] Running silent background geolocation check...")
+        
+        # Primary API
+        try:
+            req = urllib.request.Request("http://ip-api.com/json/", headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                data = json.loads(r.read().decode())
+                if "lat" in data and "lon" in data:
+                    self._update_location_if_changed(float(data["lat"]), float(data["lon"]))
+                    return
+        except Exception as e:
+            logger.warning(f"[LOCATION] Primary API (ip-api.com) failed: {e}. Trying fallback 1...")
+            
+        # Fallback 1
+        try:
+            req = urllib.request.Request("https://freeipapi.com/api/json", headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                data = json.loads(r.read().decode())
+                if "latitude" in data and "longitude" in data:
+                    self._update_location_if_changed(float(data["latitude"]), float(data["longitude"]))
+                    return
+        except Exception as e:
+            logger.warning(f"[LOCATION] Fallback 1 API (freeipapi.com) failed: {e}. Trying fallback 2...")
+            
+        # Fallback 2
+        try:
+            req = urllib.request.Request("https://ipapi.co/json/", headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                data = json.loads(r.read().decode())
+                if "latitude" in data and "longitude" in data:
+                    self._update_location_if_changed(float(data["latitude"]), float(data["longitude"]))
+                    return
+        except Exception as e:
+            logger.error(f"[LOCATION] Fallback 2 API (ipapi.co) failed: {e}. All location APIs failed.")
+
+    def _update_location_if_changed(self, lat: float, lon: float):
+        old_lat = self.settings.get("latitude", 13.08)
+        old_lon = self.settings.get("longitude", 80.27)
+        if abs(old_lat - lat) > 0.01 or abs(old_lon - lon) > 0.01:
+            logger.info(f"[LOCATION] Geolocation updated: ({old_lat}, {old_lon}) -> ({lat}, {lon})")
+            self.settings["latitude"] = lat
+            self.settings["longitude"] = lon
+            save_settings(self.settings)
+            
+            # Re-trigger color temp update
+            threading.Thread(target=self._update_color_temp, daemon=True).start()
+            
+            # Sync GUI if Settings Window is open
+            if hasattr(self, "_settings_window") and self._settings_window:
+                try:
+                    # Check if the settings window top-level exists and entries is populated
+                    if "latitude" in self._settings_window.entries:
+                        self._settings_window.entries["latitude"][0].set(str(lat))
+                    if "longitude" in self._settings_window.entries:
+                        self._settings_window.entries["longitude"][0].set(str(lon))
+                except Exception as e:
+                    logger.debug(f"Could not sync location to settings GUI: {e}")
 
     def _start_udp_listener(self):
         def _listen():
@@ -712,9 +929,10 @@ class HealthApp:
             try:
                 action, data = self.gui_queue.get_nowait()
                 if action == "settings":
-                    SettingsWindow(
+                    self._settings_window = SettingsWindow(
                         self.root, dict(self.settings), self._on_settings_saved, app=self
-                    ).show()
+                    )
+                    self._settings_window.show()
                 elif action == "warning":
                     msg, duration = data
                     if hasattr(self, "_active_warning_toast") and self._active_warning_toast:
@@ -727,27 +945,47 @@ class HealthApp:
                     )
                     self._active_warning_toast.show()
                 elif action == "health_toast":
-                    from toast_utils import is_in_break_period_shared
+                    from services.aerohub_core.toast_utils import is_in_break_period_shared
                     if is_in_break_period_shared():
                         logger.info("Discarding health tip action during break period.")
                         continue
+                    
+                    toast_settings = dict(self.settings)
+                    
+                    # Apply Night Mode overrides if within night hours
+                    nc_start = self.settings.get("nc_start_time", "23:59")
+                    nc_end = self.settings.get("nc_end_time", "06:00")
+                    if _is_time_between(nc_start, nc_end):
+                        if "ht_night_duration_sec" in self.settings:
+                            toast_settings["ht_duration_sec"] = self.settings["ht_night_duration_sec"]
+                        if "ht_night_toast_pos" in self.settings:
+                            toast_settings["ht_toast_pos"] = self.settings["ht_night_toast_pos"]
+
                     BaseToast(
-                        self.root, "Health Tip", data, self.settings, is_health_tip=True
+                        self.root, "Health Tip", data, toast_settings, is_health_tip=True
                     ).show()
                 elif action == "brightness_care":
-                    from toast_utils import is_in_break_period_shared
+                    from services.aerohub_core.toast_utils import is_in_break_period_shared
                     if is_in_break_period_shared():
                         logger.info("Discarding brightness care action during break period.")
                         continue
                     is_agg = data.get("is_aggressive", False) if data else False
-                    BrightnessWarningToast(
+                    
+                    toast_ref = BrightnessWarningToast(
                         self.root,
                         self.settings,
                         on_skip=self._skip_brightness_warning,
-                        on_decrease=lambda agg=is_agg: self._decrease_brightness(agg),
-                    ).show()
+                        on_decrease=lambda on_complete, agg=is_agg: self._decrease_brightness(
+                            agg,
+                            on_update=lambda val: toast_ref.update_progress_text(val),
+                            on_complete=on_complete
+                        ),
+                        on_skip_permanent=self._skip_brightness_permanent,
+                        on_skip_duration=self._skip_brightness_duration,
+                    )
+                    toast_ref.show()
                 elif action == "night_care_toast":
-                    from toast_utils import is_in_break_period_shared
+                    from services.aerohub_core.toast_utils import is_in_break_period_shared
                     if is_in_break_period_shared():
                         logger.info("Discarding night care action during break period.")
                         continue
@@ -772,11 +1010,17 @@ class HealthApp:
                         temp_settings,
                         is_health_tip=False,
                     ).show()
+                elif action == "screen_flick":
+                    from services.aerohub_core.toast_utils import is_in_break_period_shared
+                    if is_in_break_period_shared():
+                        continue
+                    if data:
+                        self._play_screen_flick(data.get("hold_sec", 1.0), data.get("fade_sec", 3.0))
                 elif action == "break":
                     break_type, duration, completion_event, result = data
 
                     # Set break_active = True and break_pid in shared status
-                    from toast_utils import read_shared_status, write_shared_status
+                    from services.aerohub_core.toast_utils import read_shared_status, write_shared_status
                     status = read_shared_status()
                     status["break_active"] = True
                     status["break_pid"] = os.getpid()
@@ -792,7 +1036,7 @@ class HealthApp:
                         self._active_warning_toast = None
 
                     def on_overlay_complete(status_result):
-                        from toast_utils import read_shared_status, write_shared_status
+                        from services.aerohub_core.toast_utils import read_shared_status, write_shared_status
                         st = read_shared_status()
                         st["break_active"] = False
                         st["break_pid"] = None
@@ -884,6 +1128,9 @@ class HealthApp:
 
         nc_thread = threading.Thread(target=self._night_care_loop, daemon=True)
         nc_thread.start()
+
+        location_check_thread = threading.Thread(target=self._location_check_loop, daemon=True)
+        location_check_thread.start()
 
         logger.info("Tray icon running detached.")
         self.tray_icon.run_detached()

@@ -1,10 +1,10 @@
 import pytest
 import datetime
 from unittest.mock import AsyncMock, MagicMock
-from MovieSongDownloader.core.database import db
-from MovieSongDownloader.core.models import Movie
-from MovieSongDownloader.core.settings_manager import settings_manager
-from MovieSongDownloader.services.movie_service import MovieService
+from movie_song_downloader.core.database import db
+from movie_song_downloader.core.models import Movie
+from movie_song_downloader.core.settings_manager import settings_manager
+from movie_song_downloader.services.movie_service import MovieService
 
 
 @pytest.mark.asyncio

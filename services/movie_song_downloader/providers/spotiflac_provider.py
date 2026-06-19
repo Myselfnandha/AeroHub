@@ -7,11 +7,11 @@ import shutil
 from typing import Optional, Callable
 from urllib.parse import quote_plus
 
-from MovieSongDownloader.providers.base import BaseDownloadProvider
-from MovieSongDownloader.core.models import Track
-from MovieSongDownloader.core.settings_manager import settings_manager
+from movie_song_downloader.providers.base import BaseDownloadProvider
+from movie_song_downloader.core.models import Track
+from movie_song_downloader.core.settings_manager import settings_manager
 
-logger = logging.getLogger("MovieSongDownloader.SpotiFLACProvider")
+logger = logging.getLogger("movie_song_downloader.SpotiFLACProvider")
 
 
 class SpotiFLACProvider(BaseDownloadProvider):

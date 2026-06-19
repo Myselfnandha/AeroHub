@@ -1,6 +1,8 @@
+# ruff: noqa: E402
 import os
 import re
 import asyncio
+import json
 import io
 import sys
 import socket
@@ -164,6 +166,80 @@ PROXY_HOST = os.getenv("PROXY_HOST", "127.0.0.1")
 PROXY_PORT = int(os.getenv("PROXY_PORT", "8080"))
 DOWNLOAD_METHOD = os.getenv("DOWNLOAD_METHOD", "sequential").strip().lower()
 
+def detect_openvpn_gui() -> str:
+    """Scan Windows registry and common fallback paths for openvpn-gui.exe."""
+    try:
+        import winreg
+        hives = [winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER]
+        subkeys = [
+            r"SOFTWARE\OpenVPN",
+            r"SOFTWARE\Wow6432Node\OpenVPN",
+            r"SOFTWARE\OpenVPN-GUI",
+            r"SOFTWARE\Wow6432Node\OpenVPN-GUI"
+        ]
+        for hive in hives:
+            for subkey in subkeys:
+                try:
+                    with winreg.OpenKey(hive, subkey) as key:
+                        for val_name in ("", "exe_path", "config_dir", "log_dir"):
+                            try:
+                                val, _ = winreg.QueryValueEx(key, val_name)
+                                if val:
+                                    if os.path.isfile(val) and "openvpn" in val.lower():
+                                        dir_path = os.path.dirname(val)
+                                        candidate = os.path.join(dir_path, "openvpn-gui.exe")
+                                        if os.path.isfile(candidate):
+                                            return candidate
+                                    elif os.path.isdir(val):
+                                        for sub in ("", "bin"):
+                                            candidate = os.path.join(val, sub, "openvpn-gui.exe")
+                                            if os.path.isfile(candidate):
+                                                return candidate
+                                            parent = os.path.dirname(val)
+                                            candidate = os.path.join(parent, "bin", "openvpn-gui.exe")
+                                            if os.path.isfile(candidate):
+                                                return candidate
+                            except FileNotFoundError:
+                                pass
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    try:
+        result = subprocess.run(
+            ["where", "openvpn-gui.exe"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if result.returncode == 0:
+            first_line = result.stdout.strip().splitlines()[0].strip()
+            if os.path.isfile(first_line):
+                return first_line
+    except Exception:
+        pass
+
+    fallbacks = [
+        r"C:\Program Files\OpenVPN\bin\openvpn-gui.exe",
+        r"C:\Program Files (x86)\OpenVPN\bin\openvpn-gui.exe",
+    ]
+    for fb in fallbacks:
+        if os.path.isfile(fb):
+            return fb
+
+    return r"C:\Program Files\OpenVPN\bin\openvpn-gui.exe"
+
+
+OPENVPN_GUI_PATH = os.getenv("OPENVPN_GUI_PATH", "").strip()
+if not OPENVPN_GUI_PATH:
+    OPENVPN_GUI_PATH = detect_openvpn_gui()
+
+OPENVPN_PROFILE_TYPE = os.getenv("OPENVPN_PROFILE_TYPE", "US Free").strip()
+OPENVPN_CONFIG_NAME = os.getenv("OPENVPN_CONFIG_NAME", "").strip()
+VPN_TOGGLE = os.getenv("VPN_TOGGLE", "False").strip().lower() == "true"
+
 
 def get_download_folder():
     try:
@@ -285,11 +361,11 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(SCRIPT_DIR)
 LOG_FILE_PATH = os.path.join(ROOT_DIR, "tg_fdm_proxy.log")
 
-# Ensure workspace root is in sys.path to import system_utils
+# Ensure workspace root is in sys.path to import services.aerohub_core.system_utils as system_utils
 WORKSPACE_ROOT = os.path.dirname(os.path.dirname(ROOT_DIR))
 if WORKSPACE_ROOT not in sys.path:
     sys.path.insert(0, WORKSPACE_ROOT)
-import system_utils
+import services.aerohub_core.system_utils as system_utils
 
 logging.basicConfig(
     level=logging.INFO,
@@ -604,6 +680,7 @@ async def auto_send(url: str) -> tuple[str, bool]:
 # ────────────────────────────────────────────────────────
 #  Telethon Client
 # ────────────────────────────────────────────────────────
+os.makedirs(os.path.join(os.path.dirname(SCRIPT_DIR), "Logs"), exist_ok=True)
 client = TelegramClient(
     os.path.join(os.path.dirname(SCRIPT_DIR), "Logs", "fdm_proxy_bot_session"),
     API_ID,
@@ -612,12 +689,398 @@ client = TelegramClient(
     retry_delay=1,
 )
 
+# ────────────────────────────────────────────────────────
+#  OpenVPN GUI Core Functions
+# ────────────────────────────────────────────────────────
+_vpn_connecting_lock = threading.Lock()
+_vpn_cancel_connection = False
+
+def connect_vpn():
+    """Connect to the VPN using OpenVPN GUI."""
+    if not OPENVPN_CONFIG_NAME:
+        logger.warning("[VPN] Cannot connect: OpenVPN Config Name is empty.")
+        add_event("VPN", "Cannot connect: OpenVPN Config Name is empty.", "warning")
+        return False
+
+    if not os.path.isfile(OPENVPN_GUI_PATH):
+        logger.warning(f"[VPN] OpenVPN GUI executable not found at: {OPENVPN_GUI_PATH}")
+        add_event("VPN", f"OpenVPN GUI executable not found at: {OPENVPN_GUI_PATH}", "error")
+        return False
+
+    logger.info(f"[VPN] Connecting to profile '{OPENVPN_CONFIG_NAME}'...")
+    add_event("VPN", f"Connecting to profile '{OPENVPN_CONFIG_NAME}'...")
+    try:
+        subprocess.Popen(
+            [OPENVPN_GUI_PATH, "--command", "connect", OPENVPN_CONFIG_NAME],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        )
+        return True
+    except Exception as e:
+        logger.error(f"[VPN] Failed to connect: {e}")
+        add_event("VPN", f"Failed to connect: {e}", "error")
+        return False
+
+
+def disconnect_vpn():
+    """Disconnect the VPN using OpenVPN GUI."""
+    if not os.path.isfile(OPENVPN_GUI_PATH):
+        logger.warning(f"[VPN] OpenVPN GUI executable not found at: {OPENVPN_GUI_PATH}")
+        add_event("VPN", f"OpenVPN GUI executable not found at: {OPENVPN_GUI_PATH}", "error")
+        return False
+
+    logger.info("[VPN] Disconnecting VPN connection...")
+    add_event("VPN", "Disconnecting VPN...")
+    try:
+        subprocess.Popen(
+            [OPENVPN_GUI_PATH, "--command", "disconnect_all"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        )
+        return True
+    except Exception as e:
+        logger.error(f"[VPN] Failed to disconnect: {e}")
+        add_event("VPN", f"Failed to disconnect: {e}", "error")
+        return False
+
+
+def check_vpn_status() -> bool:
+    """Check if the OpenVPN virtual adapter has an assigned IPv4 address via ipconfig."""
+    try:
+        result = subprocess.run(
+            ["ipconfig", "/all"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        )
+        if result.returncode == 0:
+            content = result.stdout
+            sections = re.split(r'\n(?=[^\s])', content)
+            for section in sections:
+                if not section.strip():
+                    continue
+                is_vpn = False
+                desc_match = re.search(r'Description[^:]*:\s*(.*)', section, re.IGNORECASE)
+                if desc_match:
+                    desc = desc_match.group(1).lower()
+                    if any(k in desc for k in ("tap-windows", "wintun", "openvpn", "tap adapter")):
+                        is_vpn = True
+                
+                name_match = re.search(r'^([^\n:]+):', section)
+                if name_match:
+                    name = name_match.group(1).lower()
+                    if "vpn" in name or "openvpn" in name:
+                        is_vpn = True
+                
+                if is_vpn:
+                    if "IPv4 Address" in section or "IP Address" in section:
+                        if "Media State" in section and "disconnected" in section.lower():
+                            continue
+                        return True
+    except Exception as e:
+        logger.warning(f"[VPN] Error running status check: {e}")
+    return False
+
+
+def find_openvpn_profiles(keyword: str) -> list[str]:
+    """Find imported OpenVPN profile names containing a keyword (case-insensitive)."""
+    config_dirs = []
+    user_profile = os.getenv("USERPROFILE")
+    if user_profile:
+        config_dirs.append(os.path.join(user_profile, "OpenVPN", "config"))
+    if OPENVPN_GUI_PATH:
+        openvpn_dir = os.path.dirname(os.path.dirname(OPENVPN_GUI_PATH))
+        config_dirs.append(os.path.join(openvpn_dir, "config"))
+    config_dirs.append(r"C:\Program Files\OpenVPN\config")
+
+    matched_profiles = []
+    for cdir in config_dirs:
+        if os.path.isdir(cdir):
+            try:
+                for fname in os.listdir(cdir):
+                    if fname.endswith(".ovpn"):
+                        name_without_ext = os.path.splitext(fname)[0]
+                        if keyword.lower() in name_without_ext.lower():
+                            matched_profiles.append(name_without_ext)
+            except Exception:
+                pass
+    return sorted(list(set(matched_profiles)))
+
+
+def resolve_profiles_for_type(profile_type: str) -> list[str]:
+    """Resolve a profile type (e.g. 'US Free') to local OpenVPN config names."""
+    if profile_type == "US Free":
+        matches = find_openvpn_profiles("us-free")
+        return matches if matches else ["us-free"]
+    elif profile_type == "Netherlands Free":
+        matches = find_openvpn_profiles("nl-free")
+        if not matches:
+            matches = find_openvpn_profiles("netherlands-free")
+        return matches if matches else ["nl-free"]
+    elif profile_type == "Japan Free":
+        matches = find_openvpn_profiles("jp-free")
+        if not matches:
+            matches = find_openvpn_profiles("japan-free")
+        return matches if matches else ["jp-free"]
+    elif profile_type == "Custom Profile":
+        if OPENVPN_CONFIG_NAME:
+            return [OPENVPN_CONFIG_NAME]
+    return []
+
+
+def get_fallback_order(start_profile_type: str) -> list[str]:
+    default_order = ["US Free", "Netherlands Free", "Japan Free"]
+    if start_profile_type not in default_order:
+        return [start_profile_type] + default_order
+    idx = default_order.index(start_profile_type)
+    return default_order[idx:] + default_order[:idx]
+
+
+def connect_vpn_with_fallback():
+    """Connect to the VPN, using fallback logic if connection fails within 15 seconds."""
+    global _vpn_cancel_connection, OPENVPN_CONFIG_NAME
+    
+    with _vpn_connecting_lock:
+        _vpn_cancel_connection = False
+        
+    fallback_chain = get_fallback_order(OPENVPN_PROFILE_TYPE)
+    logger.info(f"[VPN] Starting VPN connection fallback chain: {fallback_chain}")
+    add_event("VPN", "Starting connection fallback...")
+    
+    for profile_type in fallback_chain:
+        with _vpn_connecting_lock:
+            if _vpn_cancel_connection or not VPN_TOGGLE:
+                logger.info("[VPN] Connection attempt cancelled by user.")
+                add_event("VPN", "Connection cancelled by user.")
+                return False
+                
+        candidates = resolve_profiles_for_type(profile_type)
+        if not candidates:
+            continue
+            
+        logger.info(f"[VPN] Trying '{profile_type}' candidates: {candidates}")
+        
+        for candidate in candidates:
+            with _vpn_connecting_lock:
+                if _vpn_cancel_connection or not VPN_TOGGLE:
+                    logger.info("[VPN] Connection attempt cancelled.")
+                    add_event("VPN", "Connection cancelled.")
+                    return False
+            
+            original_config_name = OPENVPN_CONFIG_NAME
+            OPENVPN_CONFIG_NAME = candidate
+            
+            success = connect_vpn()
+            OPENVPN_CONFIG_NAME = original_config_name
+            
+            if not success:
+                continue
+                
+            connected = False
+            for _ in range(30):  # 15 seconds
+                with _vpn_connecting_lock:
+                    if _vpn_cancel_connection or not VPN_TOGGLE:
+                        logger.info("[VPN] Connection cancelled by user.")
+                        disconnect_vpn()
+                        return False
+                if check_vpn_status():
+                    connected = True
+                    break
+                time.sleep(0.5)
+                
+            if connected:
+                logger.info(f"[VPN] Connected to '{candidate}'!")
+                add_event("VPN", f"Connected to '{candidate}'", "info")
+                return True
+            else:
+                logger.warning(f"[VPN] Connection to '{candidate}' timed out.")
+                add_event("VPN", f"Connection to '{candidate}' timed out", "warning")
+                disconnect_vpn()
+                time.sleep(1.0)
+                
+    logger.error("[VPN] All VPN profiles in fallback chain failed.")
+    add_event("VPN", "All fallback profiles failed.", "error")
+    if LogDashboard._instance and LogDashboard._instance.running:
+        try:
+            LogDashboard._instance.queue.put((LogDashboard._instance._update_vpn_gui_status, (False,)))
+        except Exception:
+            pass
+    return False
+
+
+def cancel_vpn_connection():
+    global _vpn_cancel_connection
+    with _vpn_connecting_lock:
+        _vpn_cancel_connection = True
+
 # Batch state
 batch_active = False
 batch_links: list[str] = []
 
 # Option N: speed-stats registry — keyed by (chat_id, message_id)
 download_registry: dict[tuple, dict] = {}
+active_downloads: set[tuple] = set()
+
+# ────────────────────────────────────────────────────────
+#  State Persistence & Network Monitoring
+# ────────────────────────────────────────────────────────
+STATE_FILE = os.path.join(ROOT_DIR, "Logs", "proxy_state.json")
+proxy_state = {
+    "last_seen_message_ids": {}
+}
+
+def load_proxy_state():
+    global proxy_state
+    try:
+        if os.path.exists(STATE_FILE):
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                proxy_state = json.load(f)
+            if "last_seen_message_ids" not in proxy_state:
+                proxy_state["last_seen_message_ids"] = {}
+    except Exception as e:
+        logger.error(f"Error loading proxy state: {e}")
+
+def save_proxy_state():
+    try:
+        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(proxy_state, f, indent=2)
+    except Exception as e:
+        logger.error(f"Error saving proxy state: {e}")
+
+def update_last_seen(chat_id: int, message_id: int):
+    load_proxy_state()
+    last_seen = proxy_state.setdefault("last_seen_message_ids", {})
+    curr = last_seen.get(str(chat_id), 0)
+    if message_id > curr:
+        last_seen[str(chat_id)] = message_id
+        save_proxy_state()
+
+async def initialize_channel_state(channel):
+    try:
+        async for msg in client.iter_messages(channel, limit=1):
+            load_proxy_state()
+            proxy_state.setdefault("last_seen_message_ids", {})[str(channel)] = msg.id
+            save_proxy_state()
+            logger.info(f"[STATE] Initialized last_seen for channel {channel} to {msg.id}")
+            break
+    except Exception as e:
+        logger.warning(f"[STATE] Could not initialize last_seen for {channel}: {e}")
+
+async def _network_monitor_loop():
+    """Background task to monitor internet connection and trigger recovery upon restoration."""
+    logger.info("[NET] Network monitor loop started.")
+    is_online = True
+    
+    while True:
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: socket.create_connection(("8.8.8.8", 53), timeout=3).close()
+            )
+            ping_success = True
+        except Exception:
+            ping_success = False
+
+        if ping_success:
+            if not is_online:
+                logger.info("[NET] Network connection restored! Triggering recovery handler...")
+                add_event("SYSTEM", "Network connection restored! Starting recovery...", "info")
+                is_online = True
+                asyncio.create_task(_run_recovery())
+        else:
+            if is_online:
+                logger.warning("[NET] Network connection lost.")
+                add_event("SYSTEM", "Network connection lost.", "warning")
+                is_online = False
+                
+        await asyncio.sleep(15)
+
+async def _run_recovery():
+    """Performs the recovery actions: catches up on missed channel messages and retries failed downloads."""
+    try:
+        for _ in range(10):
+            if client.is_connected() and await client.is_user_authorized():
+                break
+            await asyncio.sleep(1)
+        else:
+            logger.warning("[RECOVERY] Telegram client not ready. Aborting recovery run.")
+            return
+
+        logger.info("[RECOVERY] Starting recovery run...")
+        add_event("SYSTEM", "Recovery in progress: scanning for missed messages...")
+
+        load_proxy_state()
+        last_seen = proxy_state.setdefault("last_seen_message_ids", {})
+        
+        for chat_id in list(ACTIVE_CHANNELS):
+            last_id = last_seen.get(str(chat_id), 0)
+            if not last_id:
+                try:
+                    async for msg in client.iter_messages(chat_id, limit=1):
+                        last_seen[str(chat_id)] = msg.id
+                        save_proxy_state()
+                except Exception as e:
+                    logger.warning(f"[RECOVERY] Could not init last_seen for {chat_id}: {e}")
+                continue
+
+            try:
+                messages = []
+                async for msg in client.iter_messages(chat_id, min_id=last_id, limit=100):
+                    messages.append(msg)
+                
+                messages.reverse()
+                
+                if messages:
+                    logger.info(f"[RECOVERY] Found {len(messages)} missed messages in channel {chat_id}.")
+                    add_event("SYSTEM", f"Found {len(messages)} missed messages in watch list.")
+                
+                for msg in messages:
+                    await _sniffer_handler(msg)
+                    
+            except Exception as e:
+                logger.error(f"[RECOVERY] Error catching up on channel {chat_id}: {e}")
+
+        logger.info("[RECOVERY] Scanning for incomplete/failed downloads...")
+        add_event("SYSTEM", "Recovery: checking for incomplete/failed downloads...")
+        
+        triggered_retry_count = 0
+        for key, reg in list(download_registry.items()):
+            chat_id, message_id = key
+            
+            size_bytes = reg.get("size_bytes", 0)
+            completed_ranges = reg.get("completed_ranges", [])
+            
+            intervals = sorted(completed_ranges)
+            merged = []
+            for interval in intervals:
+                if not merged or merged[-1][1] < interval[0] - 1:
+                    merged.append(list(interval))
+                else:
+                    merged[-1][1] = max(merged[-1][1], interval[1])
+            total_unique_bytes = sum(item[1] - item[0] + 1 for item in merged)
+            
+            if total_unique_bytes < size_bytes and key not in active_downloads:
+                link = f"http://{PROXY_HOST}:{PROXY_PORT}/dl/{chat_id}/{message_id}"
+                file_name = reg.get("fname", "Unknown File")
+                logger.info(f"[RECOVERY] Re-triggering failed download: {file_name} ({total_unique_bytes}/{size_bytes} bytes done)")
+                add_event("DOWNLOAD", f"Re-triggering failed download: {file_name}")
+                
+                mgr, pushed = await auto_send(link)
+                if pushed:
+                    triggered_retry_count += 1
+                    
+        if triggered_retry_count > 0:
+            add_event("SYSTEM", f"Recovery finished: re-triggered {triggered_retry_count} failed downloads.")
+        else:
+            add_event("SYSTEM", "Recovery finished: no failed downloads to retry.")
+
+    except Exception as e:
+        logger.error(f"[RECOVERY] Error in recovery handler: {e}")
 
 
 async def _download_chunk_task(media, offset, limit, chunk_size, max_retries):
@@ -656,6 +1119,7 @@ async def handle_download(request: web.Request) -> web.StreamResponse:
     response = None
     _bytes_written = 0
     _key = (chat_id, message_id)
+    active_downloads.add(_key)
 
     if _key not in download_registry:
         download_registry[_key] = {
@@ -929,6 +1393,8 @@ async def handle_download(request: web.Request) -> web.StreamResponse:
             "ERROR", f"Download failed for {chat_id}/{message_id}: {str(e)}", "error"
         )
         return web.Response(status=500, text=f"Download failed: {str(e)}")
+    finally:
+        active_downloads.discard(_key)
 
 
 # ────────────────────────────────────────────────────────
@@ -1115,6 +1581,7 @@ async def cmd_add_channel(event):
         await event.reply(f"✅ `{channel}` is already being watched.")
         return
     ACTIVE_CHANNELS.add(channel)
+    await initialize_channel_state(channel)
     save_config_to_env(
         {"TARGET_CHANNELS": ",".join(str(ch) for ch in sorted(ACTIVE_CHANNELS))}
     )
@@ -1306,6 +1773,7 @@ async def _sniffer_handler(event):
         return
     if not (event.message.media and event.message.file):
         return
+    update_last_seen(event.chat_id, event.id)
 
     fname = event.message.file.name or "Unknown File"
     size = event.message.file.size
@@ -1394,6 +1862,7 @@ async def on_new_message(event):
                                 )
                                 return
                             ACTIVE_CHANNELS.add(signed_id)
+                            await initialize_channel_state(signed_id)
                             save_config_to_env(
                                 {
                                     "TARGET_CHANNELS": ",".join(
@@ -1456,6 +1925,7 @@ async def on_new_message(event):
 
     chat_id = event.chat_id
     message_id = event.id
+    update_last_seen(chat_id, message_id)
     link = f"http://{PROXY_HOST}:{PROXY_PORT}/dl/{chat_id}/{message_id}"
     fname = event.message.file.name or "Unknown File"
     size_mb = event.message.file.size / (1024 * 1024)
@@ -1669,6 +2139,15 @@ class LogDashboard:
         self.keyword_allow_var = None
         self.download_method_var = None
         self.download_dir_var = None
+        self.openvpn_gui_path_var = None
+        self.openvpn_profile_type_var = None
+        self.openvpn_config_name_var = None
+        self.lbl_custom_name = None
+        self.entry_custom_name = None
+        self.vpn_toggle_var = None
+        self.chk_vpn = None
+        self.lbl_vpn_status = None
+        self.vpn_last_status = None
 
     def is_alive(self):
         return self.root is not None and self.running
@@ -1713,7 +2192,7 @@ class LogDashboard:
             return
         self.root.title("Telegram FDM Proxy - Event Dashboard")
         self.root.configure(bg="#0d1117")
-        self.root.geometry("850x500")
+        self.root.geometry("850x580")
 
         self.root.option_add("*Background", "#0d1117")
         self.root.option_add("*Foreground", "#c9d1d9")
@@ -1734,6 +2213,35 @@ class LogDashboard:
         # Navigation buttons inside header
         nav_frame = tk.Frame(header, bg="#161b22")
         nav_frame.pack(side=tk.RIGHT, padx=15)
+
+        # VPN Controls in Header
+        vpn_frame = tk.Frame(header, bg="#161b22")
+        vpn_frame.pack(side=tk.RIGHT, padx=20)
+
+        self.vpn_toggle_var = tk.BooleanVar(value=VPN_TOGGLE)
+        self.chk_vpn = tk.Checkbutton(
+            vpn_frame,
+            text="VPN Tunnel",
+            variable=self.vpn_toggle_var,
+            command=self._on_vpn_toggle,
+            bg="#161b22",
+            fg="#c9d1d9",
+            activebackground="#161b22",
+            activeforeground="#c9d1d9",
+            selectcolor="#0d1117",
+            font=("Segoe UI", 9, "bold"),
+            cursor="hand2"
+        )
+        self.chk_vpn.pack(side=tk.LEFT, padx=5)
+
+        self.lbl_vpn_status = tk.Label(
+            vpn_frame,
+            text="● Disconnected",
+            fg="#f85149",
+            bg="#161b22",
+            font=("Segoe UI", 9, "bold")
+        )
+        self.lbl_vpn_status.pack(side=tk.LEFT, padx=5)
 
         self.btn_monitor = tk.Button(
             nav_frame,
@@ -2010,16 +2518,91 @@ class LogDashboard:
             font=("Consolas", 9),
         ).grid(row=7, column=1, sticky=tk.EW, padx=15, pady=5)
 
+        # OpenVPN GUI Path
+        tk.Label(
+            left_pane,
+            text="OpenVPN GUI Path:",
+            font=("Segoe UI", 9),
+            bg="#161b22",
+            fg="#c9d1d9",
+        ).grid(row=8, column=0, sticky=tk.W, padx=15, pady=5)
+        self.openvpn_gui_path_var = tk.StringVar(value=str(OPENVPN_GUI_PATH))
+        tk.Entry(
+            left_pane,
+            textvariable=self.openvpn_gui_path_var,
+            bg="#21262d",
+            fg="#c9d1d9",
+            insertbackground="white",
+            relief=tk.FLAT,
+            font=("Consolas", 9),
+        ).grid(row=8, column=1, sticky=tk.EW, padx=15, pady=5)
+
+        # OpenVPN Profile Type Dropdown
+        tk.Label(
+            left_pane,
+            text="VPN Profile Type:",
+            font=("Segoe UI", 9),
+            bg="#161b22",
+            fg="#c9d1d9",
+        ).grid(row=9, column=0, sticky=tk.W, padx=15, pady=5)
+        self.openvpn_profile_type_var = tk.StringVar(value=str(OPENVPN_PROFILE_TYPE))
+        
+        profile_options = ["US Free", "Netherlands Free", "Japan Free", "Custom Profile"]
+        opt_profile_type = tk.OptionMenu(
+            left_pane,
+            self.openvpn_profile_type_var,
+            *profile_options,
+            command=self._on_profile_type_change
+        )
+        opt_profile_type.config(
+            bg="#21262d",
+            fg="#c9d1d9",
+            activebackground="#30363d",
+            activeforeground="#c9d1d9",
+            relief=tk.FLAT,
+            bd=0,
+            highlightthickness=0,
+            font=("Segoe UI", 9),
+        )
+        opt_profile_type["menu"].config(
+            bg="#21262d",
+            fg="#c9d1d9",
+            activebackground="#30363d",
+            activeforeground="#c9d1d9",
+            relief=tk.FLAT,
+            bd=0,
+        )
+        opt_profile_type.grid(row=9, column=1, sticky=tk.EW, padx=15, pady=5)
+
+        # OpenVPN Custom Profile Name (initially hidden or shown based on selection)
+        self.lbl_custom_name = tk.Label(
+            left_pane,
+            text="Custom Profile Name:",
+            font=("Segoe UI", 9),
+            bg="#161b22",
+            fg="#c9d1d9",
+        )
+        self.openvpn_config_name_var = tk.StringVar(value=str(OPENVPN_CONFIG_NAME))
+        self.entry_custom_name = tk.Entry(
+            left_pane,
+            textvariable=self.openvpn_config_name_var,
+            bg="#21262d",
+            fg="#c9d1d9",
+            insertbackground="white",
+            relief=tk.FLAT,
+            font=("Consolas", 9),
+        )
+
         # Info Label
         lbl_info = tk.Label(
             left_pane,
-            text="ℹ️ Credentials & Proxy updates require\na manual service restart to apply.",
+            text="ℹ️ Credentials, Proxy, and OpenVPN Path updates\nrequire a manual service restart to apply.",
             font=("Segoe UI", 8, "italic"),
             bg="#161b22",
             fg="#8b949e",
             justify=tk.LEFT,
         )
-        lbl_info.grid(row=8, column=0, columnspan=2, sticky=tk.W, padx=15, pady=(15, 0))
+        lbl_info.grid(row=11, column=0, columnspan=2, sticky=tk.W, padx=15, pady=(15, 0))
 
         # Right Pane Fields
         lbl_r_heading = tk.Label(
@@ -2199,6 +2782,9 @@ class LogDashboard:
         except Exception as e:
             logger.error(f"DWM rounding error in LogDashboard: {e}")
 
+        # Start VPN status poller thread
+        threading.Thread(target=self._vpn_status_poller, daemon=True).start()
+
         self.root.after(100, self._poll_queue)
 
         # Populate history
@@ -2261,6 +2847,10 @@ class LogDashboard:
             self.keyword_allow_var.set(", ".join(sorted(KEYWORD_ALLOW)))
             self.download_method_var.set(DOWNLOAD_METHOD)
             self.download_dir_var.set(str(DOWNLOAD_DIR))
+            self.openvpn_gui_path_var.set(str(OPENVPN_GUI_PATH))
+            self.openvpn_profile_type_var.set(str(OPENVPN_PROFILE_TYPE))
+            self.openvpn_config_name_var.set(str(OPENVPN_CONFIG_NAME))
+            self._on_profile_type_change(OPENVPN_PROFILE_TYPE)
             self.save_status_label.config(text="")
 
             self.btn_settings.config(fg="#58a6ff", bg="#21262d")
@@ -2275,6 +2865,7 @@ class LogDashboard:
         global ALLOWED_EXT, ACTIVE_CHANNELS
         global KEYWORD_BLOCK, KEYWORD_ALLOW
         global DOWNLOAD_METHOD, DOWNLOAD_DIR
+        global OPENVPN_GUI_PATH, OPENVPN_PROFILE_TYPE, OPENVPN_CONFIG_NAME
 
         self.save_status_label.config(text="")
 
@@ -2400,7 +2991,25 @@ class LogDashboard:
                 )
                 return
 
-            # 2. Check if restart is required
+            # OpenVPN GUI Path Validation
+            new_openvpn_gui_path = self.openvpn_gui_path_var.get().strip()
+            if not new_openvpn_gui_path:
+                self.save_status_label.config(
+                    text="❌ OpenVPN GUI Path cannot be empty.", fg="#f85149"
+                )
+                return
+
+            # OpenVPN Profile Type
+            new_openvpn_profile_type = self.openvpn_profile_type_var.get().strip()
+
+            # OpenVPN Config Profile
+            new_openvpn_config_name = self.openvpn_config_name_var.get().strip()
+            if new_openvpn_profile_type == "Custom Profile" and not new_openvpn_config_name:
+                self.save_status_label.config(
+                    text="❌ Custom Profile Name cannot be empty.", fg="#f85149"
+                )
+                return
+
             restart_required = False
             if (
                 new_api_id != API_ID
@@ -2408,6 +3017,7 @@ class LogDashboard:
                 or new_bot_token != BOT_TOKEN
                 or new_proxy_host != PROXY_HOST
                 or new_proxy_port != PROXY_PORT
+                or new_openvpn_gui_path != OPENVPN_GUI_PATH
             ):
                 restart_required = True
 
@@ -2426,6 +3036,9 @@ class LogDashboard:
             KEYWORD_ALLOW = new_kw_allow
             DOWNLOAD_METHOD = new_download_method
             DOWNLOAD_DIR = new_download_dir
+            OPENVPN_GUI_PATH = new_openvpn_gui_path
+            OPENVPN_PROFILE_TYPE = new_openvpn_profile_type
+            OPENVPN_CONFIG_NAME = new_openvpn_config_name
 
             # 4. Save to .env persistently
             config_dict = {
@@ -2444,6 +3057,10 @@ class LogDashboard:
                 "KEYWORD_ALLOW": ",".join(sorted(KEYWORD_ALLOW)),
                 "DOWNLOAD_METHOD": DOWNLOAD_METHOD,
                 "DOWNLOAD_DIR": DOWNLOAD_DIR,
+                "OPENVPN_GUI_PATH": OPENVPN_GUI_PATH,
+                "OPENVPN_PROFILE_TYPE": OPENVPN_PROFILE_TYPE,
+                "OPENVPN_CONFIG_NAME": OPENVPN_CONFIG_NAME,
+                "VPN_TOGGLE": str(VPN_TOGGLE),
             }
 
             ok = save_config_to_env(config_dict)
@@ -2504,6 +3121,79 @@ class LogDashboard:
         except Exception as e:
             logger.debug(f"Error appending event to UI: {e}")
 
+    def _on_vpn_toggle(self):
+        val = self.vpn_toggle_var.get()
+        global VPN_TOGGLE, OPENVPN_PROFILE_TYPE, OPENVPN_CONFIG_NAME, OPENVPN_GUI_PATH
+        VPN_TOGGLE = val
+        
+        if self.openvpn_profile_type_var:
+            OPENVPN_PROFILE_TYPE = self.openvpn_profile_type_var.get().strip()
+        if self.openvpn_config_name_var:
+            OPENVPN_CONFIG_NAME = self.openvpn_config_name_var.get().strip()
+        if self.openvpn_gui_path_var:
+            OPENVPN_GUI_PATH = self.openvpn_gui_path_var.get().strip()
+
+        config_dict = {
+            "VPN_TOGGLE": str(val),
+            "OPENVPN_PROFILE_TYPE": OPENVPN_PROFILE_TYPE,
+            "OPENVPN_CONFIG_NAME": OPENVPN_CONFIG_NAME,
+            "OPENVPN_GUI_PATH": OPENVPN_GUI_PATH,
+        }
+        save_config_to_env(config_dict)
+        
+        def do_vpn_action():
+            if val:
+                connect_vpn_with_fallback()
+            else:
+                cancel_vpn_connection()
+                disconnect_vpn()
+        threading.Thread(target=do_vpn_action, daemon=True).start()
+
+    def _on_profile_type_change(self, val):
+        if val == "Custom Profile":
+            self.lbl_custom_name.grid(row=10, column=0, sticky=tk.W, padx=15, pady=5)
+            self.entry_custom_name.grid(row=10, column=1, sticky=tk.EW, padx=15, pady=5)
+        else:
+            self.lbl_custom_name.grid_forget()
+            self.entry_custom_name.grid_forget()
+
+    def _vpn_status_poller(self):
+        """Background thread that checks VPN status every 5 seconds and updates the GUI."""
+        logger.info("[VPN] Status poller thread started.")
+        while self.running:
+            try:
+                is_connected = check_vpn_status()
+                
+                if self.vpn_last_status is not None and is_connected != self.vpn_last_status:
+                    status_str = "connected" if is_connected else "disconnected"
+                    level = "info" if is_connected else "warning"
+                    add_event("VPN", f"VPN state changed: {status_str}", level)
+                
+                self.vpn_last_status = is_connected
+
+                if self.root and self.running:
+                    self.queue.put((self._update_vpn_gui_status, (is_connected,)))
+            except Exception as e:
+                logger.debug(f"Error in VPN status poller: {e}")
+            
+            for _ in range(50):
+                if not self.running:
+                    break
+                time.sleep(0.1)
+
+    def _update_vpn_gui_status(self, is_connected: bool):
+        if not self.lbl_vpn_status or not self.root:
+            return
+        try:
+            if is_connected:
+                self.lbl_vpn_status.config(text="● Connected", fg="#39d353")
+                self.vpn_toggle_var.set(True)
+            else:
+                self.lbl_vpn_status.config(text="● Disconnected", fg="#f85149")
+                self.vpn_toggle_var.set(False)
+        except Exception:
+            pass
+
 
 def _start_tray_icon():
     """Start the system tray icon in a background thread."""
@@ -2560,6 +3250,12 @@ async def main():
     # Start parent process monitoring
     system_utils.monitor_parent_process(quit_app)
 
+    # Auto-connect VPN on startup if toggled ON
+    if VPN_TOGGLE:
+        logger.info("[VPN] Auto-connecting VPN on startup...")
+        add_event("VPN", "Auto-connecting VPN on startup...")
+        connect_vpn_with_fallback()
+
     # Detect download managers before connecting
     INSTALLED_MANAGERS = detect_managers()
     add_event(
@@ -2583,6 +3279,16 @@ async def main():
             await asyncio.sleep(10)
     logger.info("Bot connected successfully")
     add_event("SYSTEM", "Telegram Bot connected successfully")
+
+    # Initialize last-seen message IDs for watched channels
+    load_proxy_state()
+    last_seen = proxy_state.setdefault("last_seen_message_ids", {})
+    for chat_id in ACTIVE_CHANNELS:
+        if str(chat_id) not in last_seen:
+            await initialize_channel_state(chat_id)
+
+    # Start network monitor task
+    asyncio.create_task(_network_monitor_loop())
 
     # Option M: register command menu so BotFather shows it in Telegram UI
     try:

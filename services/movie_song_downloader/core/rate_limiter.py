@@ -1,9 +1,9 @@
 import asyncio
 import time
 import logging
-from MovieSongDownloader.config import PROVIDERS_LOG_PATH
+from movie_song_downloader.config import PROVIDERS_LOG_PATH
 
-providers_logger = logging.getLogger("MovieSongDownloader.Providers")
+providers_logger = logging.getLogger("movie_song_downloader.Providers")
 if not providers_logger.handlers:
     handler = logging.FileHandler(PROVIDERS_LOG_PATH, encoding="utf-8")
     handler.setFormatter(

@@ -1,7 +1,0 @@
-{
-  "CommandLine": "\"python -c \\\"import sys; [print(f'{i+1}: {line.strip()}') for i, line in enumerate(open('HealthApp/health_app.py', encoding='utf-8')) if 'def ' in line and i > 430]\\\"\"",
-  "Cwd": "\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\"",
-  "WaitMsBeforeAsync": "2000",
-  "toolAction": "\"Finding HealthApp methods\"",
-  "toolSummary": "\"Finding all def lines in health_app.py\""
-}

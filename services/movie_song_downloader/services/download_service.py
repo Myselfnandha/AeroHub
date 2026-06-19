@@ -7,18 +7,18 @@ from typing import Optional
 from pathlib import Path
 import httpx
 
-from MovieSongDownloader.core.database import db
-from MovieSongDownloader.core.models import DownloadJob, Movie, Album, Track
-from MovieSongDownloader.core.job_queue import job_queue
-from MovieSongDownloader.core.cache_manager import download_cache, image_cache
-from MovieSongDownloader.core.settings_manager import settings_manager
-from MovieSongDownloader.providers.deezspot_provider import DeezspotProvider
-from MovieSongDownloader.providers.spotiflac_provider import SpotiFLACProvider
-from MovieSongDownloader.providers.lyrics_provider import LyricsProvider
-from MovieSongDownloader.providers.tagging_provider import TaggingProvider
-from MovieSongDownloader.services.folder_service import FolderService
+from movie_song_downloader.core.database import db
+from movie_song_downloader.core.models import DownloadJob, Movie, Album, Track
+from movie_song_downloader.core.job_queue import job_queue
+from movie_song_downloader.core.cache_manager import download_cache, image_cache
+from movie_song_downloader.core.settings_manager import settings_manager
+from movie_song_downloader.providers.deezspot_provider import DeezspotProvider
+from movie_song_downloader.providers.spotiflac_provider import SpotiFLACProvider
+from movie_song_downloader.providers.lyrics_provider import LyricsProvider
+from movie_song_downloader.providers.tagging_provider import TaggingProvider
+from movie_song_downloader.services.folder_service import FolderService
 
-logger = logging.getLogger("MovieSongDownloader.DownloadService")
+logger = logging.getLogger("movie_song_downloader.DownloadService")
 
 
 class DownloadService:

@@ -1,6 +1,6 @@
 import pytest
-from MovieSongDownloader.core.database import db
-from MovieSongDownloader.core.cache_manager import download_cache, api_cache
+from movie_song_downloader.core.database import db
+from movie_song_downloader.core.cache_manager import download_cache, api_cache
 
 
 @pytest.mark.asyncio

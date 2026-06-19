@@ -1,7 +1,0 @@
-{
-  "CommandLine": "\"git restore HealthApp/health_app.py\"",
-  "Cwd": "\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\"",
-  "WaitMsBeforeAsync": "2000",
-  "toolAction": "\"Restoring health_app.py\"",
-  "toolSummary": "\"Restoring health_app.py\""
-}

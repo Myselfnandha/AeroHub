@@ -1,10 +1,10 @@
 import json
 import logging
 from pathlib import Path
-from MovieSongDownloader.config import SETTINGS_BACKUP_PATH, DEFAULT_SETTINGS
-from MovieSongDownloader.core.database import db
+from movie_song_downloader.config import SETTINGS_BACKUP_PATH, DEFAULT_SETTINGS
+from movie_song_downloader.core.database import db
 
-logger = logging.getLogger("MovieSongDownloader.SettingsManager")
+logger = logging.getLogger("movie_song_downloader.SettingsManager")
 
 CATEGORY_MAP = {
     "tmdb_api_key": "api",

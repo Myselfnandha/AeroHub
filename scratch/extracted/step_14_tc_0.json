@@ -1,9 +1,0 @@
-{
-  "CaseInsensitive": "true",
-  "IsRegex": "false",
-  "MatchPerLine": "true",
-  "Query": "\"toast\"",
-  "SearchPath": "\"c:\\\\Users\\\\NANDHA A\\\\Desktop\\\\UTILITIES\\\\HealthApp\\\\health_app.py\"",
-  "toolAction": "\"Searching for toast references\"",
-  "toolSummary": "\"Search for toast references\""
-}

@@ -1,9 +1,9 @@
-# MovieSongDownloader/ui/settings.py
+# movie_song_downloader/ui/settings.py
 
 import reflex as rx
-from MovieSongDownloader.ui.state import AppState
-from MovieSongDownloader.ui import style
-from MovieSongDownloader.ui.songs import dir_explorer_modal
+from movie_song_downloader.ui.state import AppState
+from movie_song_downloader.ui import style
+from movie_song_downloader.ui.songs import dir_explorer_modal
 
 
 def settings_view() -> rx.Component:

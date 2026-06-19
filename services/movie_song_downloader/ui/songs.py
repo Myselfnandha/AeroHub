@@ -1,8 +1,8 @@
-# MovieSongDownloader/ui/songs.py
+# movie_song_downloader/ui/songs.py
 
 import reflex as rx
-from MovieSongDownloader.ui.state import AppState
-from MovieSongDownloader.ui import style
+from movie_song_downloader.ui.state import AppState
+from movie_song_downloader.ui import style
 
 
 def track_row(track: rx.Var[dict]) -> rx.Component:

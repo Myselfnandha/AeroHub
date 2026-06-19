@@ -3,7 +3,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Any
 
-logger = logging.getLogger("MovieSongDownloader.EventBus")
+logger = logging.getLogger("movie_song_downloader.EventBus")
 
 
 @dataclass

@@ -1,8 +1,8 @@
-# MovieSongDownloader/ui/home.py
+# movie_song_downloader/ui/home.py
 
 import reflex as rx
-from MovieSongDownloader.ui.state import AppState
-from MovieSongDownloader.ui import style
+from movie_song_downloader.ui.state import AppState
+from movie_song_downloader.ui import style
 
 
 def movie_card(movie: rx.Var[dict]) -> rx.Component:
@@ -148,12 +148,40 @@ def watchlist_row(item: rx.Var[dict]) -> rx.Component:
 def home_view() -> rx.Component:
     """Builds the primary dashboard containing recent releases in grid mode."""
     return rx.vstack(
-        # Page Title
-        rx.heading("Dashboard Home", size="8", color=style.COLOR_TEXT_PRIMARY),
-        rx.text(
-            "Recent movie releases from Wikipedia. Click browse to explore soundtracks.",
-            color=style.COLOR_TEXT_MUTED,
-            font_size="14px",
+        # Page Title Row
+        rx.hstack(
+            rx.vstack(
+                rx.heading("Dashboard Home", size="8", color=style.COLOR_TEXT_PRIMARY),
+                rx.text(
+                    "Recent movie releases from Wikipedia. Click browse to explore soundtracks.",
+                    color=style.COLOR_TEXT_MUTED,
+                    font_size="14px",
+                ),
+                align_items="start",
+            ),
+            rx.spacer(),
+            # Status Indicator in Top Right
+            rx.cond(
+                AppState.is_fetching_updates,
+                rx.hstack(
+                    rx.spinner(color=style.COLOR_ACCENT, size="2"),
+                    rx.text(AppState.fetching_status, font_size="12px", color=style.COLOR_TEXT_MUTED),
+                    align_items="center",
+                    spacing="2",
+                ),
+                rx.cond(
+                    AppState.has_new_updates,
+                    rx.button(
+                        "Refresh Dashboard",
+                        on_click=AppState.apply_dashboard_updates,
+                        color_scheme="green",
+                        size="2",
+                        cursor="pointer",
+                    ),
+                ),
+            ),
+            width="100%",
+            align_items="center",
         ),
         # Recent Releases Header
         rx.vstack(

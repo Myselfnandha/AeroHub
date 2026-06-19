@@ -1,4 +1,4 @@
-# MovieSongDownloader/main.py
+# movie_song_downloader/main.py
 
 import argparse
 import importlib
@@ -7,7 +7,6 @@ import signal
 import socket
 import subprocess
 import sys
-import threading
 import time
 from pathlib import Path
 
@@ -43,7 +42,7 @@ sys.meta_path.insert(0, MovieSongDownloaderRedirector())
 from config.loader import load_config, load_env  # noqa: E402
 
 # Import MovieSongDownloader package first to trigger early DNS override bootstrap inside __init__.py
-import MovieSongDownloader  # noqa: F401, E402
+import movie_song_downloader  # noqa: F401, E402
 
 
 class DevConfigWatcher:
@@ -210,39 +209,18 @@ def main():
                 )
                 frontend_port = fallback_port
 
-    cmd = ["reflex", "run"]
-    if frontend_port:
-        cmd.extend(["--frontend-port", str(frontend_port)])
-    if args.env == "prod":
-        cmd.append("--env")
-        cmd.append("prod")
-    cmd.extend(extra_args)
-
-    if args.env == "dev":
-        def on_config_change(path: Path):
-            if path.name == ".env":
-                apply_env_from_config(root_dir)
-                print("Reloaded .env settings", flush=True)
-            elif path.name == "rxconfig.py":
-                reload_rxconfig(root_dir)
-
-        watcher = DevConfigWatcher(root_dir, on_config_change)
-        watcher_thread = threading.Thread(target=watcher.watch, daemon=True)
-        watcher_thread.start()
-
-    print(f"Running command: {' '.join(cmd)}", flush=True)
+    import uvicorn
+    print(f"Launching FastAPI Web Server on http://localhost:{frontend_port}", flush=True)
     try:
-        env = os.environ.copy()
-        env["PYTHONPATH"] = f"{workspace_root}{os.pathsep}{services_dir}{os.pathsep}{env.get('PYTHONPATH', '')}"
-        subprocess.run(cmd, cwd=repo_root, env=env, check=True)
+        uvicorn.run(
+            "movie_song_downloader.app:app",
+            host="127.0.0.1",
+            port=frontend_port,
+            reload=(args.env == "dev"),
+            log_level="info",
+        )
     except KeyboardInterrupt:
-        print("\nExiting Reflex Application...", flush=True)
-    except subprocess.CalledProcessError as exc:
-        print(f"Reflex exited with {exc.returncode}", file=sys.stderr, flush=True)
-        sys.exit(exc.returncode)
-    finally:
-        if args.env == "dev":
-            watcher.stop()
+        print("\nExiting Web Server...", flush=True)
 
 
 if __name__ == "__main__":

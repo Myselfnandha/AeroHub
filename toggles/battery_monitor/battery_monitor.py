@@ -35,8 +35,8 @@ LOG_FILE = os.path.join(LOGS_DIR, "battery_monitor.log")
 root_dir = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 if root_dir not in sys.path:
     sys.path.append(root_dir)
-from toast_utils import BaseToast  # noqa: E402
-import system_utils  # noqa: E402
+from services.aerohub_core.toast_utils import BaseToast  # noqa: E402
+import services.aerohub_core.system_utils as system_utils  # noqa: E402
 
 # AeroHub Theme for Settings
 TH = {
