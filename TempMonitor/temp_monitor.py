@@ -63,6 +63,8 @@ _icon_ref: pystray.Icon | None = None
 _stop_event = threading.Event()
 _alert_state: str = "NORMAL"
 _last_alert_time: float = 0
+_warning_start_time: float = 0.0
+_critical_start_time: float = 0.0
 
 
 # ── Power & Fast Sysfs Subsystems ──
@@ -279,6 +281,30 @@ def _pick_display_sensor(temps: dict[str, float], selected: str | None) -> tuple
     return name, temps[name]
 
 
+def _pick_alert_sensor(temps: dict[str, float], selected: str | None) -> tuple[str, float]:
+    """Select the primary thermal component for alerts.
+    Prioritizes overall CPU Package thermal mass over individual core spikes."""
+    if not temps:
+        return "N/A", 0.0
+
+    if selected and selected != "auto_hottest" and selected in temps:
+        return selected, temps[selected]
+
+    # Prioritize overall CPU package / die sensor (avoids single-core micro-jitter)
+    for kw in ["package id 0", "cpu package", "package", "tdie", "tctl"]:
+        for name, val in temps.items():
+            if kw in name.lower():
+                return name, val
+
+    # Fallback: Core 0, CPU, or first available
+    for kw in ["core 0", "cpu", "composite"]:
+        for name, val in temps.items():
+            if kw in name.lower():
+                return name, val
+
+    return next(iter(temps.items()))
+
+
 # ── Tray Icon Drawing ──
 
 def _temp_color(temp: float) -> tuple[int, int, int]:
@@ -345,21 +371,25 @@ def _build_tooltip(on_battery: bool = False) -> str:
     return "\n".join(lines)
 
 
-# ── Alerts State Machine with Hysteresis ──
+# ── Alerts State Machine with Sustained Duration Gate & Hysteresis ──
 
 def _check_alerts(temp: float, sensor_name: str) -> None:
-    """Alert state machine: notifies once on threshold crossing; suppresses repeats until CPU cools down."""
-    global _alert_state, _last_alert_time
+    """Alert state machine: requires continuous sustained heat (6s warning, 3s critical)
+    before alerting; filters transient Turbo Boost spikes and suppresses repeats until cooled down."""
+    global _alert_state, _last_alert_time, _warning_start_time, _critical_start_time
     now = time.time()
     warning_temp = settings.get("warning_temp", 75)
     critical_temp = settings.get("critical_temp", 85)
-    # 5°C hysteresis margin: must cool below (warning - 5°C) before resetting to NORMAL
     reset_temp = warning_temp - 5.0
 
+    # 1. Critical Evaluation (>= 85°C, requires 3.0s continuous sustain)
     if temp >= critical_temp:
-        # Alert once on entering CRITICAL
-        if _alert_state != "CRITICAL":
-            log.warning(f"CRITICAL: {sensor_name} at {temp:.0f}°C")
+        if _critical_start_time == 0.0:
+            _critical_start_time = now
+
+        sustained_crit = now - _critical_start_time
+        if sustained_crit >= 3.0 and _alert_state != "CRITICAL":
+            log.warning(f"CRITICAL: {sensor_name} at {temp:.0f}°C (sustained for {sustained_crit:.1f}s)")
             show_toast(
                 "TempMonitor",
                 "Critical Temperature!",
@@ -373,12 +403,17 @@ def _check_alerts(temp: float, sensor_name: str) -> None:
             )
             _alert_state = "CRITICAL"
             _last_alert_time = now
+    else:
+        _critical_start_time = 0.0
 
-    elif temp >= warning_temp:
-        # Alert once on entering WARNING from NORMAL.
-        # If cooling down from CRITICAL, transition silently without double-firing warning toast.
-        if _alert_state == "NORMAL":
-            log.info(f"WARNING: {sensor_name} at {temp:.0f}°C")
+    # 2. Warning Evaluation (>= 75°C, requires 6.0s continuous sustain)
+    if temp >= warning_temp:
+        if _warning_start_time == 0.0:
+            _warning_start_time = now
+
+        sustained_warn = now - _warning_start_time
+        if sustained_warn >= 6.0 and _alert_state == "NORMAL":
+            log.info(f"WARNING: {sensor_name} at {temp:.0f}°C (sustained for {sustained_warn:.1f}s)")
             show_toast(
                 "TempMonitor",
                 "High Temperature Warning",
@@ -392,14 +427,18 @@ def _check_alerts(temp: float, sensor_name: str) -> None:
             )
             _alert_state = "WARNING"
             _last_alert_time = now
-        elif _alert_state == "CRITICAL":
+        elif _alert_state == "CRITICAL" and temp < critical_temp:
             _alert_state = "WARNING"
+    else:
+        _warning_start_time = 0.0
 
-    elif temp < reset_temp:
-        # Reset state only after CPU has cooled down sufficiently
+    # 3. Recovery Reset (< 70°C)
+    if temp < reset_temp:
         if _alert_state != "NORMAL":
             log.debug(f"Temperature normalized to {temp:.0f}°C (< {reset_temp:.0f}°C). Reset alert state.")
-            _alert_state = "NORMAL" 
+            _alert_state = "NORMAL"
+        _warning_start_time = 0.0
+        _critical_start_time = 0.0
 
 
 # ── Polling Loop ──
@@ -445,8 +484,10 @@ def _poll_loop() -> None:
             except Exception:
                 pass
 
-        if temp > 0:
-            _check_alerts(temp, sensor)
+        # Alert evaluation: uses CPU Package sensor with sustained duration filter
+        alert_sensor, alert_temp = _pick_alert_sensor(temps, settings.get("selected_sensor"))
+        if alert_temp > 0:
+            _check_alerts(alert_temp, alert_sensor)
 
         # Compute next sleep interval
         dt = loop_start - last_time
