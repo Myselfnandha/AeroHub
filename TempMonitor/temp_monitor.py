@@ -61,8 +61,8 @@ _display_sensor: str = ""
 _backend: str = "none"
 _icon_ref: pystray.Icon | None = None
 _stop_event = threading.Event()
-_last_warning_time: float = 0
-_last_critical_time: float = 0
+_alert_state: str = "NORMAL"
+_last_alert_time: float = 0
 
 
 # ── Power & Fast Sysfs Subsystems ──
@@ -345,15 +345,20 @@ def _build_tooltip(on_battery: bool = False) -> str:
     return "\n".join(lines)
 
 
-# ── Alerts ──
+# ── Alerts State Machine with Hysteresis ──
 
 def _check_alerts(temp: float, sensor_name: str) -> None:
-    global _last_warning_time, _last_critical_time
+    """Alert state machine: notifies once on threshold crossing; suppresses repeats until CPU cools down."""
+    global _alert_state, _last_alert_time
     now = time.time()
-    cooldown = settings.get("alert_cooldown_sec", 120)
+    warning_temp = settings.get("warning_temp", 75)
+    critical_temp = settings.get("critical_temp", 85)
+    # 5°C hysteresis margin: must cool below (warning - 5°C) before resetting to NORMAL
+    reset_temp = warning_temp - 5.0
 
-    if temp >= settings.get("critical_temp", 85):
-        if now - _last_critical_time >= cooldown:
+    if temp >= critical_temp:
+        # Alert once on entering CRITICAL
+        if _alert_state != "CRITICAL":
             log.warning(f"CRITICAL: {sensor_name} at {temp:.0f}°C")
             show_toast(
                 "TempMonitor",
@@ -366,9 +371,13 @@ def _check_alerts(temp: float, sensor_name: str) -> None:
                 duration_sec=0,
                 sound=True,
             )
-            _last_critical_time = now
-    elif temp >= settings.get("warning_temp", 75):
-        if now - _last_warning_time >= cooldown:
+            _alert_state = "CRITICAL"
+            _last_alert_time = now
+
+    elif temp >= warning_temp:
+        # Alert once on entering WARNING from NORMAL.
+        # If cooling down from CRITICAL, transition silently without double-firing warning toast.
+        if _alert_state == "NORMAL":
             log.info(f"WARNING: {sensor_name} at {temp:.0f}°C")
             show_toast(
                 "TempMonitor",
@@ -381,7 +390,16 @@ def _check_alerts(temp: float, sensor_name: str) -> None:
                 duration_sec=4,
                 sound=False,
             )
-            _last_warning_time = now
+            _alert_state = "WARNING"
+            _last_alert_time = now
+        elif _alert_state == "CRITICAL":
+            _alert_state = "WARNING"
+
+    elif temp < reset_temp:
+        # Reset state only after CPU has cooled down sufficiently
+        if _alert_state != "NORMAL":
+            log.debug(f"Temperature normalized to {temp:.0f}°C (< {reset_temp:.0f}°C). Reset alert state.")
+            _alert_state = "NORMAL" 
 
 
 # ── Polling Loop ──

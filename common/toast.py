@@ -406,6 +406,8 @@ def _run_dynamic_island_process(
     sys.exit(app.exec())
 
 
+_active_island_proc: subprocess.Popen | None = None
+
 def _try_launch_dynamic_island(
     module_name: str,
     title: str,
@@ -416,8 +418,19 @@ def _try_launch_dynamic_island(
     accent_color: str,
     sound: bool = False,
 ) -> bool:
+    global _active_island_proc
     try:
         import PySide6
+
+        # Gracefully terminate previous toast so multiple pills never stack or double-pop
+        if _active_island_proc is not None:
+            try:
+                if _active_island_proc.poll() is None:
+                    _active_island_proc.terminate()
+            except Exception:
+                pass
+            _active_island_proc = None
+
         cmd = [
             sys.executable,
             os.path.abspath(__file__),
@@ -431,7 +444,7 @@ def _try_launch_dynamic_island(
         ]
         if sound:
             cmd.append("--sound")
-        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        _active_island_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True
     except Exception:
         return False
