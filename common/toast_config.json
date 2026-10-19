@@ -1,0 +1,27 @@
+{
+  "_comment": "Per-module toast appearance config. Each key is a module name. Values override defaults in toast.py.",
+  "BatteryMonitor": {
+    "position": "top-center",
+    "animation": "slide",
+    "duration_sec": 5
+  },
+  "HealthApp": {
+    "position": "top-left",
+    "animation": "slide",
+    "duration_sec": 3,
+    "bg_color": "#000000",
+    "text_color": "#000000"
+  },
+  "TempMonitor": {
+    "style": "dynamic_island",
+    "position": "top-center",
+    "animation": "slide",
+    "duration_sec": 4,
+    "accent_color": "#ef4444"
+  },
+  "TouchToggle": {
+    "position": "top-center",
+    "animation": "slide",
+    "duration_sec": 3
+  }
+}

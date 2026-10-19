@@ -1,0 +1,9 @@
+{
+  "_comment": "Per-module logger config. Each key is a module name. Values override defaults in logger.py.",
+  "AeroHub_Core": {
+    "level": "INFO",
+    "max_bytes": 5242880,
+    "backup_count": 2,
+    "console_output": true
+  }
+}
